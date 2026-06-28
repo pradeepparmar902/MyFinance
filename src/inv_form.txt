@@ -1,0 +1,12 @@
+return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div>
+          <div style={{ fontSize:18,fontWeight:700,color:COLORS.text }}>Banking & Investments</div>
+          <div style={{ fontSize:12,color:COLORS.textMuted }}>{investments?investments.length:0} holdings · Live tracking</div>
+        </div>
+        <button onClick={() => { setEditItem(null); setForm({ name:"", provider:"", type:"Mutual Fund SIP", icon:"📈", amount:"", current:"", interestRate:"", maturityAmount:"", startDate: new Date().toISOString().split('T')[0], endDate:"", remarks:"", linkedGoal:"", docName:"", docData:"", status:"Active", color:COLORS.secondary }); setShowForm(true); }} style={{ background: COLORS.primary, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add Investment</button>
+      </div>
+
+      {showForm && !editItem && (
+<div style={{ background: "#1a2236", paddi

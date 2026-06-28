@@ -1,0 +1,1055 @@
+function SubscriptionsView({ subscriptions, setSubscriptions, categoryMaster }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [form, setForm] = useState({ name:"", icon:"🎬", amount:"", cycle:"Monthly", status:"Active", startDate:"", endDate:"", remarks:"", bank:"", bankId:"", color:COLORS.primary, category:"Entertainment" });
+
+  const monthlyTotal = subscriptions ? subscriptions.filter(s=>s.cycle==="Monthly" && s.status!=="Paused").reduce((a,s)=>a+s.amount,0) : 0;
+  const annualCost   = subscriptions ? subscriptions.filter(s=>s.status!=="Paused").reduce((a,s)=>a+(s.cycle==="Monthly"?s.amount*12:s.amount),0) : 0;
+
+  const handleSave = () => {
+    if (!form.name || !form.amount || !form.startDate) {
+      alert("Name, Amount, and Start Date are required.");
+      return;
+    }
+    const item = { 
+      ...form, 
+      amount: parseFloat(form.amount), 
+      endDate: form.endDate || "" 
+    };
+    if (editItem) {
+      setSubscriptions(p => p.map(s => s.id === editItem.id ? { ...s, ...item } : s));
+    } else {
+      setSubscriptions(p => [...(p||[]), { ...item, id: "sub" + Date.now(), payments: [] }]);
+    }
+    setShowForm(false);
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm("Delete this subscription?")) {
+      setSubscriptions(p => p.filter(s => s.id !== id));
+      setShowForm(false);
+    }
+  };
+
+  const fmtSubDue = (s) => {
+    if (!s.startDate) return "";
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const start = new Date(s.startDate);
+    let nextDate = new Date(start);
+    let limit = 0;
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    
+    while (limit < 1000) {
+      if (s.endDate && nextDate > new Date(s.endDate)) return "Ended";
+      
+      const nextDateStr = nextDate.toISOString().split('T')[0];
+      const isPaid = s.payments && s.payments.some(p => p.date === nextDateStr);
+      
+      if (!isPaid) {
+        const d = nextDate;
+        if (nextDate <= today) return `Due: ${d.getDate()} ${months[d.getMonth()]}`;
+        return `Next: ${d.getDate()} ${months[d.getMonth()]}`;
+      }
+      
+      if (s.cycle === "Annual") nextDate.setFullYear(nextDate.getFullYear() + 1);
+      else nextDate.setMonth(nextDate.getMonth() + 1);
+      limit++;
+    }
+    return "";
+  };
+
+  return (
+    <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div style={{ fontSize:18,fontWeight:700,color:COLORS.text }}>Subscription Tracker</div>
+        <button onClick={() => { setEditItem(null); setForm({ name:"", icon:"🎬", amount:"", cycle:"Monthly", status:"Active", startDate: new Date().toISOString().split('T')[0], endDate:"", remarks:"", bank:"", color:COLORS.primary, category:"Entertainment" }); setShowForm(true); }} style={{ background: COLORS.primary, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add Sub</button>
+      </div>
+
+            {showForm && (
+        <div style={{ background: "#1a2236", padding: 16, borderRadius: 12, marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Name</label>
+              <input value={form.name} onChange={e=>setForm({...form, name: e.target.value})} placeholder="Name" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Icon (Emoji)</label>
+              <input value={form.icon} onChange={e=>setForm({...form, icon: e.target.value})} placeholder="Icon" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Amount (₹)</label>
+              <input type="number" value={form.amount} onChange={e=>setForm({...form, amount: e.target.value})} placeholder="Amount" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Billing Cycle</label>
+              <select value={form.cycle} onChange={e=>setForm({...form, cycle: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }}>
+                <option value="Monthly">Monthly</option>
+                <option value="Annual">Annual</option>
+              </select>
+            </div>
+            
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Category</label>
+              <select value={form.category} onChange={e=>setForm({...form, category: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }}>
+                {categoryMaster && categoryMaster.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Card Color</label>
+              <input type="color" value={form.color} onChange={e=>setForm({...form, color: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, padding: "4px", borderRadius: 8, height: 38, width: "100%" }} />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Start Date</label>
+              <input type="date" value={form.startDate} onChange={e=>setForm({...form, startDate: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>End Date (Leave blank for Infinite)</label>
+              <input type="date" value={form.endDate} onChange={e=>setForm({...form, endDate: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Remarks / User ID</label>
+              <input value={form.remarks} onChange={e=>setForm({...form, remarks: e.target.value})} placeholder="Purpose, connected ID, etc." style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Connected Bank / Card</label>
+              
+              <select value={form.bankId||""} onChange={e=>setForm({...form, bankId:e.target.value})} style={{ background: "#1a2236", border: `1px solid ${COLORS.border}`, padding: "9px 12px", color: COLORS.text, fontSize: 13, borderRadius: 9, width: "100%", outline: "none" }}>
+                <option value="">Select Bank Account</option>
+                {(banks||[]).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button onClick={handleSave} style={{ background: COLORS.primary, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>Save</button>
+            <button onClick={() => setShowForm(false)} style={{ background: "transparent", color: COLORS.textMuted, padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+            
+            {editItem && (
+              <div style={{ marginLeft: "auto", display: "flex", gap: 12 }}>
+                <button onClick={() => setForm({...form, status: form.status === "Paused" ? "Active" : "Paused"})} style={{ background: form.status === "Paused" ? "#10b981" : "#f59e0b", color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>
+                  {form.status === "Paused" ? "▶ Resume" : "⏸ Pause"}
+                </button>
+                <button onClick={() => handleDelete(editItem.id)} style={{ background: COLORS.danger, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>Delete</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(3,minmax(80px,1fr))",gap:9,marginBottom:14 }}>
+        <div style={{ background:"#1a2236",padding:"12px 16px",borderRadius:12,border:`1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize:10,color:COLORS.textMuted,marginBottom:4 }}>Monthly Cost</div>
+          <div style={{ fontSize:16,fontWeight:700,color:COLORS.danger }}>₹{monthlyTotal.toLocaleString("en-IN")}</div>
+        </div>
+        <div style={{ background:"#1a2236",padding:"12px 16px",borderRadius:12,border:`1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize:10,color:COLORS.textMuted,marginBottom:4 }}>Annual Total</div>
+          <div style={{ fontSize:16,fontWeight:700,color:"#F59E0B" }}>₹{(annualCost/1000).toFixed(1)}K</div>
+        </div>
+        <div style={{ background:"#1a2236",padding:"12px 16px",borderRadius:12,border:`1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize:10,color:COLORS.textMuted,marginBottom:4 }}>Active Subs</div>
+          <div style={{ fontSize:16,fontWeight:700,color:"#3B82F6" }}>{subscriptions ? subscriptions.filter(s=>s.status!=="Paused").length : 0}</div>
+        </div>
+      </div>
+
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:12 }}>
+        {subscriptions && subscriptions.map((s,i) => (
+          <div key={i} onClick={() => { setEditItem(s); setForm(s); setShowForm(true); }} style={{ background:"#1a2236",borderRadius:12,border:`1px solid ${COLORS.border}`,position:"relative",overflow:"hidden",cursor:"pointer", opacity: s.status==="Paused"?0.6:1 }}>
+            <div style={{ position:"absolute",left:0,top:0,bottom:0,width:4,background:s.color }} />
+            <div style={{ padding:12,paddingLeft:16 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12 }}>
+                <div style={{ fontSize:20 }}>{s.icon}</div>
+                <div style={{ fontSize:9,background:s.status==="Paused"?"#f59e0b33":"rgba(255,255,255,0.1)",padding:"2px 8px",borderRadius:12,color:s.status==="Paused"?"#f59e0b":COLORS.textMuted }}>{s.status==="Paused" ? "Paused" : s.cycle}</div>
+              </div>
+              <div style={{ fontSize:13,fontWeight:600,color:COLORS.text,marginBottom:2 }}>{s.name}</div>
+              <div style={{ fontSize:10,color:COLORS.textMuted,marginBottom:8 }}>{s.category}</div>
+              <div style={{ fontSize:16,fontWeight:700,color:s.color,marginBottom:2 }}>₹{s.amount.toLocaleString("en-IN")}</div>
+              <div style={{ fontSize:10,color:COLORS.textMuted }}>{fmtSubDue(s)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+// ─── Health Score View ────────────────────────────────────────────────────────
+function HealthScoreView() {
+  const score = 74;
+  const metrics = [
+    { label:"Savings Ratio",      value:42.9, benchmark:30,  status:"excellent", desc:"You save 42.9% of income. Excellent! Benchmark is 30%." },
+    { label:"Debt-to-Income",     value:30.8, benchmark:36,  status:"good",      desc:"EMI is 30.8% of income. Below the 36% safe limit." },
+    { label:"Investment Ratio",   value:28.3, benchmark:20,  status:"excellent", desc:"28.3% invested monthly. Well above the 20% benchmark." },
+    { label:"Emergency Fund",     value:80,   benchmark:100, status:"fair",      desc:"4 months covered. Target is 6 months (₹4.1L needed)." },
+    { label:"Net Worth Growth",   value:8.2,  benchmark:12,  status:"fair",      desc:"8.2% YoY growth. Aim for 12%+ via equity SIPs." },
+    { label:"Insurance Coverage", value:60,   benchmark:100, status:"poor",      desc:"Term cover ₹50L. Recommended: 15–20x annual income." },
+  ];
+  const statusColor = { excellent:COLORS.secondary, good:COLORS.primary, fair:COLORS.accent, poor:COLORS.danger };
+  const tips = [
+    { icon:"💡", tip:"Increase term life cover to ₹1.5Cr for better protection.", type:"Action" },
+    { icon:"📈", tip:"Add ₹5K/month SIP to reach 12% net worth growth target.",   type:"Invest" },
+    { icon:"🏦", tip:"Move ₹80K to FD/liquid fund to complete emergency corpus.",  type:"Safety" },
+    { icon:"💳", tip:"Close personal loan early — 14.5% rate is eating savings.",  type:"Debt"   },
+  ];
+  return (
+    <div>
+      <div style={{ fontSize:18,fontWeight:700,color:COLORS.text,marginBottom:16 }}>Financial Health Score</div>
+      <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+        {/* Score ring */}
+        <div style={{ background:COLORS.bgCard,borderRadius:20,padding:"24px 20px",border:`2px solid rgba(108,99,255,0.2)`,display:"flex",flexDirection:"column",alignItems:"center" }}>
+          <svg width={140} height={140} viewBox="0 0 160 160">
+            <circle cx={80} cy={80} r={65} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="14"/>
+            <circle cx={80} cy={80} r={65} fill="none" stroke="url(#sg2)" strokeWidth="14"
+              strokeDasharray={`${(score/100)*(2*Math.PI*65)} ${2*Math.PI*65}`}
+              strokeDashoffset={2*Math.PI*65*0.25} strokeLinecap="round"/>
+            <defs><linearGradient id="sg2" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={COLORS.primary}/><stop offset="100%" stopColor={COLORS.secondary}/>
+            </linearGradient></defs>
+            <text x={80} y={74} textAnchor="middle" fill="#F1F5F9" fontSize="32" fontWeight="800">{score}</text>
+            <text x={80} y={94} textAnchor="middle" fill={COLORS.textMuted} fontSize="13">/100</text>
+          </svg>
+          <div style={{ fontSize:18,fontWeight:700,color:COLORS.text,marginTop:8 }}>Good Standing</div>
+          <div style={{ fontSize:11,color:COLORS.textMuted,textAlign:"center",marginTop:4 }}>Better than 68% of users in your income bracket</div>
+        </div>
+        {/* Metrics */}
+        <div style={{ display:"flex",flexDirection:"column",gap:9 }}>
+          {metrics.map(m=>(
+            <div key={m.label} style={{ background:COLORS.bgCard,border:`1px solid ${COLORS.border}`,borderRadius:12,padding:"11px 14px" }}>
+              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
+                <span style={{ fontSize:12,color:COLORS.text,fontWeight:500 }}>{m.label}</span>
+                <span style={{ fontSize:10.5,padding:"1px 8px",borderRadius:20,background:`${statusColor[m.status]}22`,color:statusColor[m.status] }}>{m.status}</span>
+              </div>
+              <div style={{ background:"rgba(255,255,255,0.06)",borderRadius:4,height:5,marginBottom:5 }}>
+                <div style={{ height:"100%",width:`${Math.min(m.value/m.benchmark*70,100)}%`,background:statusColor[m.status],borderRadius:4,transition:"width 1s" }}/>
+              </div>
+              <div style={{ fontSize:10,color:COLORS.textMuted }}>{m.desc}</div>
+            </div>
+          ))}
+        </div>
+        {/* AI Tips */}
+        <div style={{ background:COLORS.bgCard,border:`1px solid rgba(108,99,255,0.2)`,borderRadius:14,padding:"14px 16px" }}>
+          <div style={{ fontSize:13,fontWeight:600,color:COLORS.text,marginBottom:10 }}>✦ Personalized Action Items</div>
+          <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+            {tips.map(t=>(
+              <div key={t.tip} style={{ display:"flex",gap:12,alignItems:"flex-start",padding:"9px 11px",background:"rgba(255,255,255,0.03)",borderRadius:10 }}>
+                <span style={{ fontSize:18,flexShrink:0 }}>{t.icon}</span>
+                <div>
+                  <div style={{ fontSize:10,color:COLORS.primary,fontWeight:600,marginBottom:2 }}>{t.type}</div>
+                  <div style={{ fontSize:12,color:COLORS.textMuted,lineHeight:1.5 }}>{t.tip}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Retirement View ──────────────────────────────────────────────────────────
+function RetirementView() {
+  const [monthlyExpense, setMonthlyExpense] = useState(68500);
+  const [currentAge,    setCurrentAge]     = useState(32);
+  const [retireAge,     setRetireAge]      = useState(60);
+  const [inflation,     setInflation]      = useState(6);
+  const [returnRate,    setReturnRate]     = useState(12);
+  const [currentCorpus, setCurrentCorpus] = useState(340000);
+  const [monthlySIP,    setMonthlySIP]    = useState(35000);
+
+  const years       = retireAge - currentAge;
+  const inflatedExp = monthlyExpense * Math.pow(1+inflation/100, years);
+  const corpus      = inflatedExp * 12 * 25;
+  const futureCorpus= currentCorpus * Math.pow(1+returnRate/100, years);
+  const mRate       = returnRate/100/12;
+  const months      = years * 12;
+  const sipFV       = monthlySIP * ((Math.pow(1+mRate,months)-1)/mRate) * (1+mRate);
+  const totalFV     = futureCorpus + sipFV;
+  const onTrack     = totalFV >= corpus;
+  const gap         = Math.max(corpus - totalFV, 0);
+  const reqSIP      = gap > 0 ? (gap * mRate)/(Math.pow(1+mRate,months)-1) : 0;
+
+  const iStyle = { background:"#1a2236",border:`1px solid ${COLORS.border}`,borderRadius:9,padding:"8px 12px",color:COLORS.text,fontSize:13,width:"100%",outline:"none",boxSizing:"border-box",WebkitAppearance:"none",appearance:"none",caretColor:"#6C63FF" };
+
+  const milestones = [
+    { age:35, label:"First ₹10L corpus",   done:true  },
+    { age:40, label:"₹50L net worth",      done:false },
+    { age:45, label:"₹1Cr portfolio",      done:false },
+    { age:50, label:"Kids education done", done:false },
+    { age:55, label:"Home loan closed",    done:false },
+    { age:60, label:"Retire 🎉",           done:false },
+  ];
+
+  const fields = [
+    { label:"Monthly Expenses (₹)", val:monthlyExpense, set:setMonthlyExpense },
+    { label:"Current Age",           val:currentAge,    set:setCurrentAge     },
+    { label:"Retirement Age",        val:retireAge,     set:setRetireAge      },
+    { label:"Inflation Rate (%)",    val:inflation,     set:setInflation      },
+    { label:"Expected Return (%)",   val:returnRate,    set:setReturnRate     },
+    { label:"Current Corpus (₹)",    val:currentCorpus, set:setCurrentCorpus  },
+    { label:"Monthly SIP (₹)",       val:monthlySIP,    set:setMonthlySIP     },
+  ];
+
+  return (
+    <div>
+      <div style={{ fontSize:18,fontWeight:700,color:COLORS.text,marginBottom:4 }}>Retirement Corpus Planner</div>
+      <div style={{ fontSize:12,color:COLORS.textMuted,marginBottom:16 }}>Plan your retirement with SIP projections</div>
+      <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+        {/* Inputs */}
+        <div style={{ background:COLORS.bgCard,borderRadius:16,padding:"16px",border:`1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize:13,fontWeight:600,color:COLORS.text,marginBottom:12 }}>Your Details</div>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,minmax(80px,1fr))",gap:10 }}>
+            {fields.map(f=>(
+              <div key={f.label}>
+                <label style={{ fontSize:10,color:COLORS.textMuted,display:"block",marginBottom:4 }}>{f.label}</label>
+                <input type="number" inputMode="numeric" value={f.val} onChange={e=>f.set(+e.target.value)} style={iStyle}/>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Status */}
+        <div style={{ background:onTrack?"rgba(0,200,150,0.08)":"rgba(255,91,91,0.08)",border:`1px solid ${onTrack?COLORS.secondary:COLORS.danger}44`,borderRadius:14,padding:"16px" }}>
+          <div style={{ fontSize:11,color:COLORS.textMuted }}>STATUS</div>
+          <div style={{ fontSize:20,fontWeight:800,color:onTrack?COLORS.secondary:COLORS.danger,marginTop:4 }}>{onTrack?"✅ On Track!":"⚠️ Needs Attention"}</div>
+          <div style={{ fontSize:11,color:COLORS.textMuted,marginTop:4 }}>{onTrack?`Surplus: ₹${((totalFV-corpus)/10000000).toFixed(2)}Cr`:`Shortfall: ₹${(gap/10000000).toFixed(2)}Cr`}</div>
+        </div>
+        {/* Results grid */}
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(3,minmax(80px,1fr))",gap:10 }}>
+          {[
+            { label:"Years to Retire",       val:`${years} yrs`,                                          color:COLORS.primary   },
+            { label:"Target Corpus",          val:`₹${(corpus/10000000).toFixed(2)}Cr`,                   color:COLORS.primary,  big:true },
+            { label:"Projected Corpus",       val:`₹${(totalFV/10000000).toFixed(2)}Cr`,                  color:COLORS.secondary,big:true },
+            { label:"Monthly Expense @60",    val:`₹${Math.round(inflatedExp).toLocaleString("en-IN")}`,  color:COLORS.accent    },
+            { label:"Req. SIP (if gap)",      val:reqSIP>0?`₹${Math.round(reqSIP).toLocaleString("en-IN")}`:"None 🎉", color:reqSIP>0?COLORS.danger:COLORS.secondary },
+            { label:"Retirement Age",         val:`Age ${retireAge}`,                                     color:COLORS.textMuted },
+          ].map(r=>(
+            <div key={r.label} style={{ background:COLORS.bgCard,borderRadius:12,padding:"12px 14px",border:`1px solid ${r.big?r.color+"44":COLORS.border}` }}>
+              <div style={{ fontSize:10,color:COLORS.textMuted,marginBottom:4 }}>{r.label}</div>
+              <div style={{ fontSize:r.big?16:13,fontWeight:r.big?700:600,color:r.color }}>{r.val}</div>
+            </div>
+          ))}
+        </div>
+        {/* Milestones */}
+        <div style={{ background:COLORS.bgCard,border:`1px solid ${COLORS.border}`,borderRadius:14,padding:"14px 16px" }}>
+          <div style={{ fontSize:12,fontWeight:600,color:COLORS.text,marginBottom:10 }}>🗺️ Retirement Milestones</div>
+          <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
+            {milestones.map(m=>(
+              <div key={m.age} style={{ display:"flex",gap:10,alignItems:"center" }}>
+                <div style={{ width:28,height:28,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,background:m.done?`${COLORS.secondary}25`:"rgba(255,255,255,0.05)",color:m.done?COLORS.secondary:COLORS.textMuted,border:`1.5px solid ${m.done?COLORS.secondary:"rgba(255,255,255,0.1)"}` }}>{m.done?"✓":m.age}</div>
+                <span style={{ fontSize:12,color:m.done?COLORS.text:COLORS.textMuted }}>{m.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FreedomCalcView() {
+  const [income, setIncome] = useState(120000);
+  const [expense, setExpense] = useState(68500);
+  const [corpus, setCorpus] = useState(1240000);
+  const [returnRate, setReturnRate] = useState(10);
+  const [inflationRate, setInflationRate] = useState(6);
+
+  const monthlySavings = income - expense;
+  const savingsRate = ((monthlySavings / income) * 100).toFixed(1);
+  const realReturn = returnRate - inflationRate;
+  const annualExpense = expense * 12;
+  const ffCorpus = (annualExpense * 25); // 4% SWR
+  const yearsToFF = realReturn > 0
+    ? Math.log((ffCorpus - corpus * (realReturn / 100)) / (ffCorpus - corpus * (realReturn / 100) - monthlySavings * 12)) / Math.log(1 + realReturn / 100)
+    : (ffCorpus - corpus) / (monthlySavings * 12);
+  const ffYear = new Date().getFullYear() + Math.ceil(yearsToFF);
+  const fiNumber = ffCorpus;
+  const progress = Math.min((corpus / fiNumber) * 100, 100).toFixed(1);
+
+  const stages = [
+    { label: "Solvency", desc: "No debt, positive net worth", done: true },
+    { label: "Stability", desc: "3–6 months emergency fund", done: true },
+    { label: "Agency", desc: "Can survive 1 year without income", done: false },
+    { label: "Security", desc: "Investments cover basic needs", done: false },
+    { label: "Independence", desc: "Investments cover all expenses", done: false },
+    { label: "Abundance", desc: "Wealth well beyond needs", done: false },
+  ];
+
+  const inputStyle = { background: "rgba(255,255,255,0.06)", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", boxSizing: "border-box" };
+  const labelStyle = { fontSize: 11, color: COLORS.textMuted, marginBottom: 4, display: "block" };
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>🏁 Financial Freedom Calculator</div>
+      <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 20 }}>Find your FI Number and retirement date — based on the 4% Safe Withdrawal Rule</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20 }}>
+        {/* Inputs */}
+        <div style={{ background: COLORS.bgCard, borderRadius: 16, padding: "20px", border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Your Numbers</div>
+          {[
+            { label: "Monthly Income (₹)", val: income, set: setIncome },
+            { label: "Monthly Expenses (₹)", val: expense, set: setExpense },
+            { label: "Current Corpus (₹)", val: corpus, set: setCorpus },
+            { label: "Expected Investment Return (%)", val: returnRate, set: setReturnRate },
+            { label: "Inflation Rate (%)", val: inflationRate, set: setInflationRate },
+          ].map(f => (
+            <div key={f.label}>
+              <label style={labelStyle}>{f.label}</label>
+              <input type="number" value={f.val} onChange={e => f.set(+e.target.value)} style={inputStyle} />
+            </div>
+          ))}
+          <div style={{ background: `${COLORS.secondary}15`, border: `1px solid ${COLORS.secondary}30`, borderRadius: 10, padding: "10px 14px" }}>
+            <div style={{ fontSize: 11, color: COLORS.textMuted }}>Monthly Savings</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.secondary }}>₹{monthlySavings.toLocaleString("en-IN")} <span style={{ fontSize: 12, fontWeight: 400 }}>({savingsRate}% rate)</span></div>
+          </div>
+        </div>
+
+        {/* Results */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* FI Number */}
+          <div style={{ background: `linear-gradient(135deg, rgba(108,99,255,0.15), rgba(0,200,150,0.08))`, border: `1px solid rgba(108,99,255,0.25)`, borderRadius: 18, padding: "22px 24px" }}>
+            <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 4 }}>YOUR FI NUMBER (25× annual expenses)</div>
+            <div style={{ fontSize: 32, fontWeight: 800, color: COLORS.text, letterSpacing: "-1px" }}>
+              ₹{(fiNumber / 10000000).toFixed(2)} <span style={{ fontSize: 16, fontWeight: 500, color: COLORS.textMuted }}>Crore</span>
+            </div>
+            <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>You need this corpus to retire and live off returns forever</div>
+          </div>
+
+          {/* Progress to FI */}
+          <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "18px 20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Progress to Financial Independence</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.primary }}>{progress}%</span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 6, height: 12, overflow: "hidden", marginBottom: 8 }}>
+              <div style={{ height: "100%", width: `${progress}%`, borderRadius: 6, background: `linear-gradient(90deg, ${COLORS.primary}, ${COLORS.secondary})`, transition: "width 1.2s ease", boxShadow: `0 0 10px ${COLORS.primary}55` }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: COLORS.textMuted }}>
+              <span>Current: ₹{(corpus/100000).toFixed(1)}L</span>
+              <span>Target: ₹{(fiNumber/100000).toFixed(0)}L</span>
+            </div>
+          </div>
+
+          {/* Years to FI */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "16px 18px" }}>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 4 }}>Years to Financial Freedom</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.accent }}>{Math.ceil(yearsToFF)} yrs</div>
+            </div>
+            <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "16px 18px" }}>
+              <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 4 }}>Freedom Year</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.secondary }}>{ffYear}</div>
+            </div>
+          </div>
+
+          {/* FI Stages */}
+          <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 18px" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.text, marginBottom: 12 }}>Your FI Journey Stages</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {stages.map((s, i) => (
+                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: s.done ? `${COLORS.secondary}25` : "rgba(255,255,255,0.05)", color: s.done ? COLORS.secondary : COLORS.textMuted, border: `1.5px solid ${s.done ? COLORS.secondary : "rgba(255,255,255,0.1)"}` }}>{s.done ? "✓" : i + 1}</div>
+                  <div>
+                    <span style={{ fontSize: 12, color: s.done ? COLORS.text : COLORS.textMuted, fontWeight: s.done ? 600 : 400 }}>{s.label}</span>
+                    <span style={{ fontSize: 10.5, color: COLORS.textMuted, marginLeft: 6 }}>· {s.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reports View ─────────────────────────────────────────────────────────────
+function ReportsView() {
+  const months = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const data = [
+    { month: "Jul", income: 95000, expense: 72000, savings: 23000 },
+    { month: "Aug", income: 105000, expense: 68000, savings: 37000 },
+    { month: "Sep", income: 110000, expense: 71000, savings: 39000 },
+    { month: "Oct", income: 115000, expense: 69000, savings: 46000 },
+    { month: "Nov", income: 118000, expense: 66000, savings: 52000 },
+    { month: "Dec", income: 120000, expense: 68500, savings: 51500 },
+  ];
+  const totalIncome = data.reduce((a,d)=>a+d.income,0);
+  const totalExpense = data.reduce((a,d)=>a+d.expense,0);
+  const totalSavings = data.reduce((a,d)=>a+d.savings,0);
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>Reports & Analytics</div>
+      <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 18 }}>6-month financial summary · Jul–Dec 2024</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(80px,1fr))", gap: 12, marginBottom: 18 }}>
+        {[
+          { label: "Total Income", val: `₹${(totalIncome/100000).toFixed(2)}L`, color: COLORS.secondary },
+          { label: "Total Expense", val: `₹${(totalExpense/100000).toFixed(2)}L`, color: COLORS.danger },
+          { label: "Total Savings", val: `₹${(totalSavings/100000).toFixed(2)}L`, color: COLORS.primary },
+        ].map(s => (
+          <div key={s.label} style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "14px 18px" }}>
+            <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", padding: "10px 18px", borderBottom: `1px solid ${COLORS.border}` }}>
+          {["Month", "Income", "Expense", "Savings", "Rate"].map(h => (
+            <div key={h} style={{ fontSize: 10.5, color: COLORS.textMuted, fontWeight: 600 }}>{h.toUpperCase()}</div>
+          ))}
+        </div>
+        {data.map((d, i) => (
+          <div key={d.month} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", padding: "13px 18px", borderBottom: i < data.length - 1 ? `1px solid rgba(255,255,255,0.04)` : "none" }}>
+            <div style={{ fontSize: 13, color: COLORS.text, fontWeight: 600 }}>{d.month} '24</div>
+            <div style={{ fontSize: 12, color: COLORS.secondary }}>₹{d.income.toLocaleString("en-IN")}</div>
+            <div style={{ fontSize: 12, color: COLORS.danger }}>₹{d.expense.toLocaleString("en-IN")}</div>
+            <div style={{ fontSize: 12, color: COLORS.primary }}>₹{d.savings.toLocaleString("en-IN")}</div>
+            <div style={{ fontSize: 12, color: COLORS.accent }}>{((d.savings/d.income)*100).toFixed(1)}%</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── All monthly data (single source of truth) ────────────────────────────────
+const ALL_MONTHLY_DATA = [
+  { year: 2024, month: 1,  label: "Jan '24", income: 90000,  expense: 65000, savings: 25000 },
+  { year: 2024, month: 2,  label: "Feb '24", income: 90000,  expense: 62000, savings: 28000 },
+  { year: 2024, month: 3,  label: "Mar '24", income: 95000,  expense: 70000, savings: 25000 },
+  { year: 2024, month: 4,  label: "Apr '24", income: 95000,  expense: 67000, savings: 28000 },
+  { year: 2024, month: 5,  label: "May '24", income: 100000, expense: 71000, savings: 29000 },
+  { year: 2024, month: 6,  label: "Jun '24", income: 100000, expense: 69000, savings: 31000 },
+  { year: 2024, month: 7,  label: "Jul '24", income: 95000,  expense: 72000, savings: 23000 },
+  { year: 2024, month: 8,  label: "Aug '24", income: 105000, expense: 68000, savings: 37000 },
+  { year: 2024, month: 9,  label: "Sep '24", income: 110000, expense: 71000, savings: 39000 },
+  { year: 2024, month: 10, label: "Oct '24", income: 115000, expense: 69000, savings: 46000 },
+  { year: 2024, month: 11, label: "Nov '24", income: 118000, expense: 66000, savings: 52000 },
+  { year: 2024, month: 12, label: "Dec '24", income: 120000, expense: 68500, savings: 51500 },
+  { year: 2025, month: 1,  label: "Jan '25", income: 122000, expense: 70000, savings: 52000 },
+  { year: 2025, month: 2,  label: "Feb '25", income: 122000, expense: 67000, savings: 55000 },
+  { year: 2025, month: 3,  label: "Mar '25", income: 125000, expense: 72000, savings: 53000 },
+  { year: 2025, month: 4,  label: "Apr '25", income: 125000, expense: 68000, savings: 57000 },
+  { year: 2025, month: 5,  label: "May '25", income: 128000, expense: 71000, savings: 57000 },
+  { year: 2025, month: 6,  label: "Jun '25", income: 120000, expense: 69500, savings: 50500 },
+];
+
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// Utility: filter rows by a dateFilter object
+function applyDateFilter(rows, df) {
+  if (df.mode === "month") {
+    return rows.filter(r => r.year === df.year && r.month === df.month);
+  }
+  if (df.mode === "year") {
+    return rows.filter(r => r.year === df.year);
+  }
+  if (df.mode === "range") {
+    const from = df.fromYear * 100 + df.fromMonth;
+    const to   = df.toYear   * 100 + df.toMonth;
+    return rows.filter(r => {
+      const key = r.year * 100 + r.month;
+      return key >= from && key <= to;
+    });
+  }
+  return rows;
+}
+
+function sumRows(rows) {
+  return rows.reduce((acc, r) => ({
+    income:  acc.income  + r.income,
+    expense: acc.expense + r.expense,
+    savings: acc.savings + r.savings,
+  }), { income: 0, expense: 0, savings: 0 });
+}
+
+function filterLabel(df) {
+  if (df.mode === "month") return `${MONTH_NAMES[df.month-1]} ${df.year}`;
+  if (df.mode === "year")  return `FY ${df.year}`;
+  if (df.mode === "range") return `${MONTH_NAMES[df.fromMonth-1]} ${df.fromYear} → ${MONTH_NAMES[df.toMonth-1]} ${df.toYear}`;
+  return "";
+}
+
+// ─── Global Filter Bar ────────────────────────────────────────────────────────
+function FilterBar({ filter, setFilter }) {
+  const [expanded,   setExpanded]   = useState(false);
+  const [showRange,  setShowRange]  = useState(false);
+  const [rangeFrom,  setRangeFrom]  = useState({ month:1, year:new Date().getFullYear() });
+  const [rangeTo,    setRangeTo]    = useState({ month:new Date().getMonth()+1, year:new Date().getFullYear() });
+  const now = new Date();
+  const curMonth = now.getMonth()+1, curYear = now.getFullYear();
+  const lm = curMonth===1?12:curMonth-1, ly = curMonth===1?curYear-1:curYear;
+  const years = Array.from({length:4},(_,i)=>curYear-1+i);
+
+  const selS = { background:"#1a2236", border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 8px", color:COLORS.text, fontSize:12, outline:"none", cursor:"pointer", WebkitAppearance:"none", appearance:"none", flex:1 };
+  const pill = (active, onClick, label) => (
+    <button onClick={onClick} style={{ padding:"5px 11px", borderRadius:20, fontSize:11, cursor:"pointer", border:`1px solid ${active?COLORS.primary:COLORS.border}`, background:active?`${COLORS.primary}25`:"transparent", color:active?COLORS.primary:COLORS.textMuted, fontWeight:active?700:400, whiteSpace:"nowrap", transition:"all 0.15s", flexShrink:0 }}>{label}</button>
+  );
+
+  const isDefault = filter.mode==="month" && filter.month===curMonth && filter.year===curYear;
+
+  return (
+    <div style={{ background:"rgba(255,255,255,0.03)", border:`1px solid ${expanded?COLORS.primary+"55":COLORS.border}`, borderRadius:14, marginBottom:12, width:"100%", boxSizing:"border-box", overflow:"hidden", transition:"border-color 0.2s" }}>
+
+      {/* ── Always-visible collapsed bar ── */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 12px", cursor:"pointer" }} onClick={()=>{ setExpanded(e=>!e); if(expanded) setShowRange(false); }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+          <span style={{ fontSize:14, flexShrink:0 }}>📅</span>
+          {/* When collapsed: show quick pills inline */}
+          {!expanded && (
+            <div style={{ display:"flex", gap:5, flexWrap:"nowrap", overflow:"hidden" }}>
+              {[
+                { label:"This Month", active:filter.mode==="month"&&filter.month===curMonth&&filter.year===curYear, onClick:()=>setFilter({mode:"month",month:curMonth,year:curYear}) },
+                { label:"Last Month", active:filter.mode==="month"&&filter.month===lm&&filter.year===ly, onClick:()=>setFilter({mode:"month",month:lm,year:ly}) },
+                { label:"Q1",active:filter.mode==="range"&&filter.fromMonth===1&&filter.toMonth===3&&filter.fromYear===curYear, onClick:()=>setFilter({mode:"range",fromMonth:1,fromYear:curYear,toMonth:3,toYear:curYear}) },
+                { label:"Q2",active:filter.mode==="range"&&filter.fromMonth===4&&filter.toMonth===6&&filter.fromYear===curYear, onClick:()=>setFilter({mode:"range",fromMonth:4,fromYear:curYear,toMonth:6,toYear:curYear}) },
+                { label:"Q3",active:filter.mode==="range"&&filter.fromMonth===7&&filter.toMonth===9&&filter.fromYear===curYear, onClick:()=>setFilter({mode:"range",fromMonth:7,fromYear:curYear,toMonth:9,toYear:curYear}) },
+                { label:"Q4",active:filter.mode==="range"&&filter.fromMonth===10&&filter.toMonth===12&&filter.fromYear===curYear, onClick:()=>setFilter({mode:"range",fromMonth:10,fromYear:curYear,toMonth:12,toYear:curYear}) },
+              ].map(p=>(
+                <button key={p.label} onClick={e=>{ e.stopPropagation(); p.onClick(); }} style={{ padding:"4px 10px", borderRadius:20, fontSize:10.5, cursor:"pointer", border:`1px solid ${p.active?COLORS.primary:COLORS.border}`, background:p.active?`${COLORS.primary}25`:"transparent", color:p.active?COLORS.primary:COLORS.textMuted, fontWeight:p.active?700:400, whiteSpace:"nowrap", flexShrink:0 }}>{p.label}</button>
+              ))}
+            </div>
+          )}
+          {expanded && <span style={{ fontSize:12, color:COLORS.primary, fontWeight:600 }}>Date Filter</span>}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, marginLeft:8 }}>
+          {/* Active filter badge — always visible */}
+          <span style={{ fontSize:10.5, fontWeight:700, color:COLORS.accent, background:`${COLORS.accent}18`, padding:"3px 9px", borderRadius:20, border:`1px solid ${COLORS.accent}33`, whiteSpace:"nowrap" }}>{filterLabel(filter)}</span>
+          {!isDefault && (
+            <button onClick={e=>{ e.stopPropagation(); setFilter({mode:"month",month:curMonth,year:curYear}); }} style={{ fontSize:10, color:COLORS.textMuted, background:"rgba(255,255,255,0.06)", border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"3px 7px", cursor:"pointer", whiteSpace:"nowrap" }}>Reset</button>
+          )}
+          {/* Expand / Collapse toggle */}
+          <div style={{ width:26, height:26, borderRadius:8, background:expanded?`${COLORS.primary}22`:"rgba(255,255,255,0.06)", border:`1px solid ${expanded?COLORS.primary+"55":COLORS.border}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.2s" }}>
+            <span style={{ fontSize:12, color:expanded?COLORS.primary:COLORS.textMuted, display:"block", transform:expanded?"rotate(180deg)":"rotate(0deg)", transition:"transform 0.25s" }}>▾</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Expandable panel ── */}
+      {expanded && (
+        <div style={{ padding:"0 12px 14px", borderTop:`1px solid ${COLORS.border}` }}>
+
+          {/* Quick pills row */}
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap", alignItems:"center", paddingTop:12, marginBottom:12 }}>
+            {pill(filter.mode==="month"&&filter.month===curMonth&&filter.year===curYear, ()=>{setFilter({mode:"month",month:curMonth,year:curYear});setShowRange(false);}, "This Month")}
+            {pill(filter.mode==="month"&&filter.month===lm&&filter.year===ly, ()=>{setFilter({mode:"month",month:lm,year:ly});setShowRange(false);}, "Last Month")}
+            {[{l:"Q1",m:[1,3]},{l:"Q2",m:[4,6]},{l:"Q3",m:[7,9]},{l:"Q4",m:[10,12]}].map(q=>{
+              const isA=filter.mode==="range"&&filter.fromMonth===q.m[0]&&filter.toMonth===q.m[1]&&filter.fromYear===curYear&&filter.toYear===curYear;
+              return pill(isA,()=>{setFilter({mode:"range",fromMonth:q.m[0],fromYear:curYear,toMonth:q.m[1],toYear:curYear});setShowRange(false);},q.l);
+            })}
+            {pill(filter.mode==="year"&&filter.year===curYear, ()=>{setFilter({mode:"year",year:curYear});setShowRange(false);}, `${curYear}`)}
+            {pill(filter.mode==="year"&&filter.year===curYear-1, ()=>{setFilter({mode:"year",year:curYear-1});setShowRange(false);}, `${curYear-1}`)}
+            <button onClick={()=>setShowRange(s=>!s)} style={{ padding:"5px 11px", borderRadius:20, fontSize:11, cursor:"pointer", border:`1px solid ${showRange||filter.mode==="range"?COLORS.accent:COLORS.border}`, background:showRange||filter.mode==="range"?`${COLORS.accent}20`:"transparent", color:showRange||filter.mode==="range"?COLORS.accent:COLORS.textMuted, whiteSpace:"nowrap" }}>⚙ Range</button>
+          </div>
+
+          {/* Month grid 6×2 */}
+          <div style={{ fontSize:10, color:COLORS.textMuted, marginBottom:6 }}>Select Month</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:4, marginBottom:8 }}>
+            {MONTH_NAMES.map((m,i)=>{
+              const mo=i+1, isA=filter.mode==="month"&&filter.month===mo;
+              return <button key={m} onClick={()=>{setFilter({mode:"month",month:mo,year:filter.year||curYear});setShowRange(false);}} style={{ padding:"5px 2px", borderRadius:12, fontSize:10.5, cursor:"pointer", border:`1px solid ${isA?COLORS.secondary:COLORS.border}`, background:isA?`${COLORS.secondary}22`:"transparent", color:isA?COLORS.secondary:COLORS.textMuted, fontWeight:isA?700:400 }}>{m}</button>;
+            })}
+          </div>
+
+          {/* Year row */}
+          <div style={{ display:"flex", gap:5, marginBottom:showRange?12:0 }}>
+            {years.map(y=>{
+              const isA=(filter.mode==="month"||filter.mode==="year")&&filter.year===y;
+              return <button key={y} onClick={()=>setFilter(f=>({...f,mode:"month",year:y}))} style={{ flex:1, padding:"6px 4px", borderRadius:10, fontSize:11, cursor:"pointer", border:`1px solid ${isA?COLORS.primary:COLORS.border}`, background:isA?`${COLORS.primary}22`:"transparent", color:isA?COLORS.primary:COLORS.textMuted, fontWeight:isA?700:400 }}>{y}</button>;
+            })}
+          </div>
+
+          {/* Custom range panel */}
+          {showRange && (
+            <div style={{ padding:"11px 12px", background:"rgba(255,183,71,0.06)", border:`1px solid rgba(255,183,71,0.2)`, borderRadius:10 }}>
+              <div style={{ fontSize:11, color:COLORS.accent, fontWeight:600, marginBottom:10 }}>📆 Custom Range</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <div>
+                  <div style={{ fontSize:10, color:COLORS.textMuted, marginBottom:5 }}>FROM</div>
+                  <div style={{ display:"flex", gap:5 }}>
+                    <select value={rangeFrom.month} onChange={e=>setRangeFrom(f=>({...f,month:parseInt(e.target.value)}))} style={selS}>{MONTH_NAMES.map((m,i)=><option key={m} value={i+1}>{m}</option>)}</select>
+                    <select value={rangeFrom.year}  onChange={e=>setRangeFrom(f=>({...f,year:parseInt(e.target.value)}))}  style={selS}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:COLORS.textMuted, marginBottom:5 }}>TO</div>
+                  <div style={{ display:"flex", gap:5 }}>
+                    <select value={rangeTo.month} onChange={e=>setRangeTo(f=>({...f,month:parseInt(e.target.value)}))} style={selS}>{MONTH_NAMES.map((m,i)=><option key={m} value={i+1}>{m}</option>)}</select>
+                    <select value={rangeTo.year}  onChange={e=>setRangeTo(f=>({...f,year:parseInt(e.target.value)}))}  style={selS}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select>
+                  </div>
+                </div>
+              </div>
+              <button onClick={()=>{setFilter({mode:"range",fromMonth:rangeFrom.month,fromYear:rangeFrom.year,toMonth:rangeTo.month,toYear:rangeTo.year});setShowRange(false);setExpanded(false);}} style={{ marginTop:10, width:"100%", padding:"9px", borderRadius:9, border:"none", background:`linear-gradient(135deg,${COLORS.accent},#f59e0b)`, color:"#000", fontSize:12.5, fontWeight:700, cursor:"pointer" }}>Apply & Close</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Filtered Dashboard View ──────────────────────────────────────────────────
+function DashboardViewFiltered({ filter }) {
+  const filtered = applyDateFilter(ALL_MONTHLY_DATA, filter);
+  const totals   = sumRows(filtered);
+  const savingsRate = totals.income > 0 ? ((totals.savings / totals.income) * 100).toFixed(1) : 0;
+  const months   = filtered.map(r => MONTH_NAMES[r.month - 1]);
+  const incArr   = filtered.map(r => r.income);
+  const expArr   = filtered.map(r => r.expense);
+
+  // Compare to previous equivalent period
+  const prevFilter = filter.mode === "month"
+    ? { mode:"month", month: filter.month===1?12:filter.month-1, year: filter.month===1?filter.year-1:filter.year }
+    : filter.mode === "year" ? { mode:"year", year: filter.year-1 }
+    : { mode:"range", fromMonth:filter.fromMonth, fromYear:filter.fromYear-1, toMonth:filter.toMonth, toYear:filter.toYear-1 };
+  const prevTotals = sumRows(applyDateFilter(ALL_MONTHLY_DATA, prevFilter));
+  const incomeTrend  = prevTotals.income  > 0 ? +((totals.income  - prevTotals.income)  / prevTotals.income  * 100).toFixed(1) : 0;
+  const expenseTrend = prevTotals.expense > 0 ? +((totals.expense - prevTotals.expense) / prevTotals.expense * 100).toFixed(1) : 0;
+  const savingsTrend = prevTotals.savings > 0 ? +((totals.savings - prevTotals.savings) / prevTotals.savings * 100).toFixed(1) : 0;
+
+  const invData = [
+    { name: "Mutual Funds", value: 140000, color: COLORS.primary },
+    { name: "Stocks",       value: 80000,  color: COLORS.accent },
+    { name: "FD",           value: 60000,  color: COLORS.secondary },
+    { name: "Gold",         value: 40000,  color: "#F59E0B" },
+    { name: "PPF",          value: 20000,  color: "#8B5CF6" },
+  ];
+  const goals = [
+    { label: "House 2029",     pct: 12, color: COLORS.primary },
+    { label: "Car 2025",       pct: 65, color: COLORS.secondary },
+    { label: "Retirement",     pct: 22, color: COLORS.accent },
+    { label: "Emergency Fund", pct: 80, color: "#8B5CF6" },
+  ];
+
+  const noData = filtered.length === 0;
+
+  if (noData) return (
+    <div style={{ textAlign:"center", padding:"60px 20px", color:COLORS.textMuted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
+      <div style={{ fontSize:15, fontWeight:600, color:COLORS.text }}>No data for this period</div>
+      <div style={{ fontSize:12, marginTop:6 }}>Try selecting a different date range</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* KPI Row — driven by filter */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12 }}>
+        <KPICard label="Total Income"   value={totals.income}   trend={incomeTrend}  trendLabel="vs prev period" color={COLORS.secondary} sparkData={incArr.length>1?incArr:[totals.income,totals.income]}   icon="↑" />
+        <KPICard label="Total Expense"  value={totals.expense}  trend={expenseTrend} trendLabel="vs prev period" color={COLORS.danger}    sparkData={expArr.length>1?expArr:[totals.expense,totals.expense]} icon="↓" />
+        <KPICard label="Net Savings"    value={totals.savings}  trend={savingsTrend} trendLabel="vs prev period" color={COLORS.accent}    sparkData={filtered.map(r=>r.savings)}                            icon="★" />
+        <KPICard label="Savings Rate"   value={parseFloat(savingsRate)} prefix="" suffix="%" trend={0} trendLabel="" color={COLORS.primary} sparkData={filtered.map(r=>r.income>0?(r.savings/r.income*100):0)} icon="⊕" />
+        <KPICard label="Investments"    value={340000}          trend={5.4}          trendLabel="portfolio gain" color="#8B5CF6"          sparkData={[260000,280000,295000,310000,325000,340000]}            icon="◎" />
+        <KPICard label="Net Worth"      value={1240000}         trend={8.2}          trendLabel="vs last year"  color={COLORS.primary}   sparkData={[900000,980000,1050000,1100000,1180000,1240000]}        icon="◈" />
+      </div>
+
+      {/* Charts Row */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ gridColumn: "unset", background: COLORS.bgCard, borderRadius: 16, padding: "16px 18px", border: `1px solid ${COLORS.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Income vs Expense</div>
+              <div style={{ fontSize: 11, color: COLORS.textMuted }}>{filterLabel(filter)}</div>
+            </div>
+            <div style={{ display: "flex", gap: 10, fontSize: 10.5 }}>
+              <span style={{ color: COLORS.secondary }}>● Income</span>
+              <span style={{ color: COLORS.danger }}>● Expense</span>
+            </div>
+          </div>
+          {months.length >= 2
+            ? <BarChart months={months} income={incArr} expense={expArr} />
+            : (
+              <div style={{ padding: "16px 0" }}>
+                {[
+                  { label:"Income",  val:totals.income,  color:COLORS.secondary },
+                  { label:"Expense", val:totals.expense, color:COLORS.danger },
+                  { label:"Savings", val:totals.savings, color:COLORS.accent },
+                ].map(r => (
+                  <div key={r.label} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+                    <span style={{ fontSize:13, color:COLORS.textMuted }}>{r.label}</span>
+                    <span style={{ fontSize:14, fontWeight:700, color:r.color }}>₹{r.val.toLocaleString("en-IN")}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </div>
+        <div style={{ background: COLORS.bgCard, borderRadius: 16, padding: "16px 18px", border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 4 }}>Investments</div>
+          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 10 }}>Allocation</div>
+          <div style={{ display: "flex", justifyContent: "center" }}><DonutChart data={invData} /></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+            {invData.map(d => (
+              <div key={d.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: d.color }} />
+                  <span style={{ fontSize: 10, color: COLORS.textMuted }}>{d.name}</span>
+                </div>
+                <span style={{ fontSize: 10, color: COLORS.text }}>₹{(d.value/1000).toFixed(0)}K</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Goals + AI */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
+        <div style={{ background: COLORS.bgCard, borderRadius: 16, padding: "16px 18px", border: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 12 }}>Goal Progress</div>
+          <div style={{ display: "flex", justifyContent: "space-around" }}>
+            {goals.map(g => <CircularProgress key={g.label} pct={g.pct} color={g.color} label={g.label} />)}
+          </div>
+        </div>
+        <div style={{ background: COLORS.bgCard, borderRadius: 16, padding: "16px 18px", border: `1px solid rgba(108,99,255,0.2)`, boxShadow: `0 0 28px rgba(108,99,255,0.07)` }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>✦</span> AI Financial Advisor
+            <span style={{ marginLeft:"auto", fontSize:9, background:`${COLORS.primary}33`, color:COLORS.primary, padding:"2px 8px", borderRadius:20, border:`1px solid ${COLORS.primary}44` }}>LIVE</span>
+          </div>
+          <AIChatPanel />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Filtered Income View ─────────────────────────────────────────────────────
+// ─── Live Data Store (localStorage-backed) ───────────────────────────────────
+const SEED_INCOME = [
+  { id:"i1",  date:"2025-06-01", source:"Salary",      amount:95000, note:"Infosys Ltd. — June salary",      icon:"💼", color:COLORS.primary   },
+  { id:"i2",  date:"2025-06-05", source:"Freelancing", amount:18000, note:"React dashboard project",          icon:"💻", color:COLORS.secondary },
+  { id:"i3",  date:"2025-06-07", source:"Rental",      amount:5000,  note:"Flat in Andheri — June rent",      icon:"🏠", color:COLORS.accent    },
+  { id:"i4",  date:"2025-06-10", source:"Dividend",    amount:1200,  note:"Infosys Q1 dividend",              icon:"📈", color:"#8B5CF6"        },
+  { id:"i5",  date:"2025-06-12", source:"Interest",    amount:800,   note:"HDFC FD interest payout",          icon:"🏦", color:"#F59E0B"        },
+  { id:"i6",  date:"2025-05-01", source:"Salary",      amount:93000, note:"Infosys Ltd. — May salary",        icon:"💼", color:COLORS.primary   },
+  { id:"i7",  date:"2025-05-08", source:"Freelancing", amount:12000, note:"Logo design project",              icon:"💻", color:COLORS.secondary },
+  { id:"i8",  date:"2025-05-12", source:"Rental",      amount:5000,  note:"Flat in Andheri — May rent",       icon:"🏠", color:COLORS.accent    },
+  { id:"i9",  date:"2025-04-01", source:"Salary",      amount:93000, note:"Infosys Ltd. — April salary",      icon:"💼", color:COLORS.primary   },
+  { id:"i10", date:"2025-04-15", source:"Other",       amount:3500,  note:"Bonus incentive Q4",               icon:"🎁", color:"#06B6D4"        },
+];
+
+const SEED_CREDIT_CARDS = [
+  { id:"cc1", name:"HDFC Regalia", network:"Visa", limit: 500000, billingDate: "15", color: "#6C63FF" },
+  { id:"cc2", name:"SBI Cashback", network:"Visa", limit: 250000, billingDate: "12", color: "#00C896" },
+  { id:"cc3", name:"ICICI Amazon Pay", network:"Visa", limit: 100000, billingDate: "20", color: "#FFB547" },
+];
+
+const SEED_EXPENSES = [
+  { id:"e1",  date:"2025-06-12", storeName:"Swiggy",              productName:"Butter Chicken + Naan",    cat:"Food",          amount:480,   icon:"🍽️", color:COLORS.danger,    paymentMode:"UPI",         hasWarranty:false },
+  { id:"e2",  date:"2025-06-12", storeName:"BPCL Fuel Station",   productName:"Petrol 25L",               cat:"Fuel",          amount:2500,  icon:"⛽", color:COLORS.accent,    paymentMode:"UPI",         hasWarranty:false },
+  { id:"e3",  date:"2025-06-11", storeName:"Reliance Fresh",      productName:"Monthly Groceries",        cat:"Grocery",       amount:4200,  icon:"🛒", color:COLORS.secondary, paymentMode:"Credit Card", creditCardId:"cc1", hasWarranty:false },
+  { id:"e4",  date:"2025-06-10", storeName:"PVR Cinemas",         productName:"Kalki 2898-AD (2 seats)",  cat:"Entertainment", amount:840,   icon:"🎬", color:"#8B5CF6",        paymentMode:"UPI",         hasWarranty:false },
+  { id:"e5",  date:"2025-06-10", storeName:"Apollo Pharmacy",     productName:"BP Medicines + Vitamins",  cat:"Medical",       amount:1240,  icon:"💊", color:COLORS.primary,   paymentMode:"Cash",        hasWarranty:false },
+  { id:"e6",  date:"2025-06-09", storeName:"Amazon India",        productName:"Samsung Galaxy Buds2",     cat:"Shopping",      amount:5999,  icon:"📦", color:COLORS.accent,    paymentMode:"Credit Card", creditCardId:"cc2", hasWarranty:true,
+    warrantyData:{ type:"Warranty", period:"12", unit:"months", expiryDate:"2026-06-09", expiryDay:"9", expiryMonth:"6", expiryYear:"2026", purchaseDate:"2025-06-09" }},
+  { id:"e7",  date:"2025-06-09", storeName:"Zomato",              productName:"Pizza + Garlic Bread",     cat:"Food",          amount:620,   icon:"🍽️", color:COLORS.danger,    paymentMode:"UPI",         hasWarranty:false },
+  { id:"e8",  date:"2025-06-08", storeName:"MSEDCL",              productName:"Electricity Bill",         cat:"Utilities",     amount:1820,  icon:"💡", color:"#F59E0B",        paymentMode:"Net Banking", hasWarranty:false },
+  { id:"e9",  date:"2025-06-08", storeName:"Mahatma Jyoti Academy",productName:"Daughter's Tuition",     cat:"Education",     amount:3500,  icon:"📚", color:COLORS.primary,   paymentMode:"NEFT",        hasWarranty:false },
+  { id:"e10", date:"2025-06-07", storeName:"IndiGo Airlines",     productName:"Mumbai → Bengaluru",       cat:"Travel",        amount:5600,  icon:"✈️", color:"#06B6D4",        paymentMode:"Debit Card",  hasWarranty:false },
+  { id:"e11", date:"2025-06-06", storeName:"D-Mart",              productName:"Household Items",          cat:"Grocery",       amount:2100,  icon:"🛒", color:COLORS.secondary, paymentMode:"Cash",        hasWarranty:false },
+  { id:"e12", date:"2025-06-05", storeName:"Croma",               productName:"Philips Air Fryer",        cat:"Shopping",      amount:8500,  icon:"🛍️", color:COLORS.accent,   paymentMode:"EMI",         hasWarranty:true,
+    warrantyData:{ type:"Guarantee", period:"24", unit:"months", expiryDate:"2027-06-05", expiryDay:"5", expiryMonth:"6", expiryYear:"2027", purchaseDate:"2025-06-05" }},
+  { id:"e13", date:"2025-06-04", storeName:"Myntra",              productName:"3x T-shirts + Jeans",      cat:"Shopping",      amount:2499,  icon:"👕", color:COLORS.accent,    paymentMode:"Credit Card", creditCardId:"cc1", hasWarranty:false },
+  { id:"e14", date:"2025-06-03", storeName:"Cafe Coffee Day",     productName:"Coffee + Sandwiches",      cat:"Food",          amount:380,   icon:"☕", color:COLORS.danger,    paymentMode:"UPI",         hasWarranty:false },
+  { id:"e15", date:"2025-06-03", storeName:"Jio Fiber",           productName:"1 Gbps Plan Jun 2025",     cat:"Utilities",     amount:1199,  icon:"📡", color:"#F59E0B",        paymentMode:"Auto-debit",  hasWarranty:false },
+  { id:"e16", date:"2025-05-31", storeName:"BookMyShow",          productName:"Ed Sheeran Live Ticket",   cat:"Entertainment", amount:3200,  icon:"🎵", color:"#8B5CF6",        paymentMode:"Credit Card", creditCardId:"cc1", hasWarranty:false },
+  { id:"e17", date:"2025-05-30", storeName:"Makemytrip",          productName:"Goa Hotel 3N/4D",          cat:"Travel",        amount:12500, icon:"🏨", color:"#06B6D4",        paymentMode:"EMI",         hasWarranty:false },
+  { id:"e18", date:"2025-05-28", storeName:"HDFC Life",           productName:"Term Insurance Premium",   cat:"Utilities",     amount:6800,  icon:"🛡️", color:"#F59E0B",       paymentMode:"Net Banking", hasWarranty:false },
+  { id:"e19", date:"2025-05-15", storeName:"BigBasket",           productName:"Fruits & Vegetables",      cat:"Grocery",       amount:890,   icon:"🥦", color:COLORS.secondary, paymentMode:"UPI",         hasWarranty:false },
+  { id:"e20", date:"2025-05-10", storeName:"Decathlon",           productName:"Running Shoes Nike",       cat:"Shopping",      amount:3999,  icon:"👟", color:COLORS.accent,    paymentMode:"Debit Card",  hasWarranty:true,
+    warrantyData:{ type:"Warranty", period:"6", unit:"months", expiryDate:"2025-12-10", expiryDay:"10", expiryMonth:"12", expiryYear:"2025", purchaseDate:"2025-05-10" }},
+  { id:"e21", date:"2025-04-20", storeName:"Manipal Hospital",    productName:"Annual Health Checkup",    cat:"Medical",       amount:2800,  icon:"🏥", color:COLORS.primary,   paymentMode:"Credit Card", creditCardId:"cc1", hasWarranty:false },
+  { id:"e22", date:"2025-04-12", storeName:"IOCL Petrol Pump",    productName:"Diesel 40L",               cat:"Fuel",          amount:3680,  icon:"⛽", color:COLORS.accent,    paymentMode:"UPI",         hasWarranty:false },
+  { id:"e23", date:"2025-04-05", storeName:"Unacademy",           productName:"UPSC Prep 6M Plan",        cat:"Education",     amount:4999,  icon:"📖", color:COLORS.primary,   paymentMode:"Credit Card", creditCardId:"cc1", hasWarranty:false },
+  { id:"e24", date:"2025-03-22", storeName:"Mahanagar Gas",       productName:"PNG Bill Mar 2025",        cat:"Utilities",     amount:740,   icon:"🔥", color:"#F59E0B",        paymentMode:"Net Banking", hasWarranty:false },
+  { id:"e25", date:"2025-03-10", storeName:"Swiggy Instamart",    productName:"Snacks + Beverages",       cat:"Grocery",       amount:560,   icon:"🛒", color:COLORS.secondary, paymentMode:"UPI",         hasWarranty:false },
+];
+
+function useLocalStorage(key, seed) {
+  const [val, setVal] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : seed;
+    } catch { return seed; }
+  });
+  const set = (v) => {
+    const next = typeof v === "function" ? v(val) : v;
+    setVal(next);
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+  };
+  return [val, set];
+}
+
+// ─── Income Add/Edit Modal ────────────────────────────────────────────────────
+function IncomeModal({ onClose, onSave, editing, banks }) {
+  const SOURCES = ["Salary","Freelancing","Rental","Business","Dividend","Interest","Bonus","Gift","Other"];
+  const ICONS   = { Salary:"💼", Freelancing:"💻", Rental:"🏠", Business:"🏢", Dividend:"📈", Interest:"🏦", Bonus:"🎁", Gift:"🎀", Other:"💰" };
+  const SCOLORS = { Salary:COLORS.primary, Freelancing:COLORS.secondary, Rental:COLORS.accent, Business:"#06B6D4", Dividend:"#8B5CF6", Interest:"#F59E0B", Bonus:"#10B981", Gift:"#EC4899", Other:COLORS.textMuted };
+  const [form, setForm] = useState(editing || { date: new Date().toISOString().split("T")[0], source:"Salary", amount:"", note:"" });
+  const iStyle = { background:"#1a2236", border:`1px solid ${COLORS.border}`, borderRadius:9, padding:"9px 12px", color:COLORS.text, fontSize:13, width:"100%", outline:"none", boxSizing:"border-box", caretColor:"#6C63FF" };
+  const valid = form.source && form.amount > 0 && form.date;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:100, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div style={{ background:"#0d1526", border:`1px solid rgba(0,200,150,0.25)`, borderRadius:"20px 20px 0 0", padding:"20px 18px 32px", width:"100%", maxWidth:500, maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:COLORS.text }}>{editing ? "✏️ Edit Income" : "➕ Add Income"}</div>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8, width:30, height:30, color:COLORS.textMuted, cursor:"pointer", fontSize:16 }}>✕</button>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
+          <div>
+            <label style={{ fontSize:11, color:COLORS.textMuted, display:"block", marginBottom:5 }}>SOURCE *</label>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {SOURCES.map(s => (
+                <button key={s} onClick={() => setForm(p=>({...p, source:s}))} style={{ padding:"6px 13px", borderRadius:20, fontSize:11.5, cursor:"pointer", border:`1px solid ${form.source===s?COLORS.secondary:COLORS.border}`, background:form.source===s?`${COLORS.secondary}20`:"transparent", color:form.source===s?COLORS.secondary:COLORS.textMuted, fontWeight:form.source===s?700:400 }}>{ICONS[s]} {s}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <div>
+              <label style={{ fontSize:11, color:COLORS.textMuted, display:"block", marginBottom:5 }}>DATE *</label>
+              <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={iStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, color:COLORS.textMuted, display:"block", marginBottom:5 }}>AMOUNT (₹) *</label>
+              <input type="number" inputMode="numeric" placeholder="0" value={form.amount} onChange={e=>setForm(p=>({...p,amount:e.target.value}))} style={iStyle} />
+            </div>
+          </div>
+          
+          <div>
+            <label style={{ fontSize:11, color:COLORS.textMuted, display:"block", marginBottom:5 }}>BANK ACCOUNT</label>
+            <select value={form.bankId||""} onChange={e=>setForm(p=>({...p,bankId:e.target.value}))} style={iStyle}>
+               <option value="">No Bank selected</option>
+               {(banks||[]).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:11, color:COLORS.textMuted, display:"block", marginBottom:5 }}>NOTE / DESCRIPTION</label>
+            <input type="text" placeholder="e.g. Infosys June salary, freelance project..." value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} style={iStyle} />
+          </div>
+          <button onClick={() => { if(valid){ onSave({ ...form, amount:parseFloat(form.amount), icon:ICONS[form.source]||"💰", color:SCOLORS[form.source]||COLORS.textMuted }); onClose(); }}} disabled={!valid} style={{ padding:"13px", borderRadius:12, border:"none", background:valid?`linear-gradient(135deg,${COLORS.secondary},#059669)`:"rgba(255,255,255,0.08)", color:valid?"#fff":COLORS.textMuted, fontSize:14, fontWeight:700, cursor:valid?"pointer":"not-allowed", marginTop:4 }}>
+            {editing ? "Update Income" : "Save Income"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Live Income View ─────────────────────────────────────────────────────────
+function IncomeViewLive({ incomes, setIncomes, filter, banks }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editing,   setEditing]   = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
+
+  const filtered = incomes.filter(inc => {
+    const d = new Date(inc.date);
+    const m = d.getMonth()+1, y = d.getFullYear();
+    if (filter.mode==="month") return m===filter.month && y===filter.year;
+    if (filter.mode==="year")  return y===filter.year;
+    if (filter.mode==="range") { const k=y*100+m; return k>=filter.fromYear*100+filter.fromMonth && k<=filter.toYear*100+filter.toMonth; }
+    return true;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  const total = filtered.reduce((s,i)=>s+parseFloat(i.amount||0),0);
+
+  const bySource = filtered.reduce((acc,i)=>{ acc[i.source]=(acc[i.source]||0)+i.amount; return acc; },{});
+  const topSource = Object.entries(bySource).sort((a,b)=>b[1]-a[1]);
+
+  const handleSave = (data) => {
+    if (editing) {
+      setIncomes(p => p.map(i => i.id===editing.id ? {...data, id:editing.id} : i));
+    } else {
+      setIncomes(p => [{...data, id:"i"+Date.now()}, ...p]);
+    }
+    setEditing(null);
+  };
+
+  const handleDelete = (id) => { setIncomes(p=>p.filter(i=>i.id!==id)); setConfirmDel(null); };
+
+  const MS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtDate = d => { const dt=new Date(d); return `${dt.getDate()} ${MS[dt.getMonth()]} ${dt.getFullYear()}`; };
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:700, color:COLORS.text }}>Income Management</div>
+          <div style={{ fontSize:12, color:COLORS.textMuted, marginTop:2 }}>{filterLabel(filter)} · <b style={{ color:COLORS.secondary }}>₹{total.toLocaleString("en-IN")}</b> · {filtered.length} entries</div>
+        </div>
+        <button onClick={()=>{ setEditing(null); setShowModal(true); }} style={{ background:`linear-gradient(135deg,${COLORS.secondary},#059669)`, border:"none", borderRadius:12, padding:"9px 16px", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>➕ Add Income</button>
+      </div>
+
+      {/* Source Summary */}
+      {topSource.length > 0 && (
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:"16px 18px", marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:600, color:COLORS.text, marginBottom:12 }}>Income by Source</div>
+          {topSource.map(([src,amt])=>(
+            <div key={src} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7 }}>
+              <div style={{ width:70, fontSize:11, color:COLORS.textMuted, flexShrink:0 }}>{src}</div>
+              <div style={{ flex:1, background:"rgba(255,255,255,0.05)", borderRadius:4, height:7 }}>
+                <div style={{ height:"100%", width:`${(amt/total)*100}%`, background:`linear-gradient(90deg,${COLORS.secondary},${COLORS.primary})`, borderRadius:4, transition:"width 1s" }} />
+              </div>
+              <div style={{ width:70, fontSize:11, color:COLORS.secondary, fontWeight:600, textAlign:"right" }}>₹{(amt/1000).toFixed(1)}K</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"40px 20px", color:COLORS.textMuted }}>
+          <div style={{ fontSize:32, marginBottom:10 }}>📭</div>
+          <div style={{ fontSize:14, color:COLORS.text }}>No income entries for this period</div>
+          <button onClick={()=>setShowModal(true)} style={{ marginTop:14, padding:"9px 20px", borderRadius:12, border:"none", background:`${COLORS.secondary}22`, color:COLORS.secondary, fontSize:13, cursor:"pointer" }}>➕ Add your first income</button>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {filtered.map(inc => (
+            <div key={inc.id} style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:12, padding:"12px 14px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+                  <div style={{ width:40, height:40, borderRadius:10, background:`${inc.color}20`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{inc.icon}</div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:COLORS.text }}>{inc.source}</div>
+                    <div style={{ fontSize:10.5, color:COLORS.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{inc.note || "—"} · {fmtDate(inc.date)}</div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, marginLeft:8 }}>
+                  <div style={{ fontSize:15, fontWeight:700, color:COLORS.secondary }}>+₹{inc.amount.toLocaleString("en-IN")}</div>
+                  <button onClick={()=>{ setEditing(inc); setShowModal(true); }} style={{ background:`${COLORS.primary}22`, border:`1px solid ${COLORS.primary}44`, borderRadius:8, width:28, height:28, color:COLORS.primary, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
+                  <button onClick={()=>setConfirmDel(inc.id)} style={{ background:`${COLORS.danger}18`, border:`1px solid ${COLORS.danger}33`, borderRadius:8, width:28, height:28, color:COLORS.danger, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>🗑</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showModal && <IncomeModal banks={banks} onClose={()=>{ setShowModal(false); setEditing(null); }} onSave={handleSave} editing={editing} />}
+
+      {confirmDel && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div style={{ background:"#111827", borderRadius:18, padding:"24px 22px", maxWidth:320, width:"100%", border:`1px solid ${COLORS.danger}33` }}>
+            <div style={{ fontSize:24, textAlign:"center", marginBottom:12 }}>🗑️</div>
+            <div style={{ fontSize:15, fontWeight:700, color:COLORS.text, textAlign:"center", marginBottom:8 }}>Delete Income Entry?</div>
+            <div style={{ fontSize:12, color:COLORS.textMuted, textAlign:"center", marginBottom:20 }}>This cannot be undone.</div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setConfirmDel(null)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${COLORS.border}`, background:"transparent", color:COLORS.textMuted, cursor:"pointer", fontSize:13 }}>Cancel</button>
+              <button onClick={()=>handleDelete(confirmDel)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", background:COLORS.danger, color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700 }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Live Expense View (with edit/delete added to existing) ───────────────────
+
+// ─── Insurance View ────────────────────────────────────────────────────────────

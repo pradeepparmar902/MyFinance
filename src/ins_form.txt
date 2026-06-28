@@ -1,0 +1,9 @@
+return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div style={{ fontSize:18,fontWeight:700,color:COLORS.text }}>Insurance Tracker</div>
+        <button onClick={() => { setEditItem(null); setForm({ name:"", provider:"", type:"Medical Insurance", icon:"🛡️", amount:"", coverage:"", cycle:"Annual", startDate: new Date().toISOString().split('T')[0], endDate:"", moreInfo:"", docLink:"", docName:"", docData:"", color:COLORS.primary }); setShowForm(true); }} style={{ background: COLORS.primary, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add Policy</button>
+      </div>
+
+                  {deleteConfirm && (
+        <div style={{ position: "fixed

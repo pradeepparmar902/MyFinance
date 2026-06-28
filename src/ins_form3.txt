@@ -1,0 +1,108 @@
+showForm && (
+        <div style={{ background: "#1a2236", padding: 16, borderRadius: 12, marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Policy Name</label>
+              <input value={form.name} onChange={e=>setForm({...form, name: e.target.value})} placeholder="e.g. Optima Restore" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Provider</label>
+              <input value={form.provider} onChange={e=>setForm({...form, provider: e.target.value})} placeholder="e.g. HDFC Ergo" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Insurance Type</label>
+              <select value={form.type} onChange={e=>setForm({...form, type: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }}>
+                <option value="Medical Insurance">Medical Insurance</option>
+                <option value="Life Insurance">Life Insurance</option>
+                <option value="Motor Insurance">Motor Insurance</option>
+                <option value="Term Insurance">Term Insurance</option>
+                <option value="Home Insurance">Home Insurance</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Bank Account</label>
+              <select value={form.bankId||""} onChange={e=>setForm({...form, bankId:e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, padding: "8px 12px", color: COLORS.text, fontSize: 13, borderRadius: 8, width: "100%", outline: "none" }}>
+                <option value="">Select Bank Account</option>
+                {(banks||[]).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Coverage Value (Sum Insured)</label>
+              <input value={form.coverage || ""} onChange={e=>setForm({...form, coverage: e.target.value})} placeholder="e.g. ₹10,00,000" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Premium Amount (₹)</label>
+              <input type="number" value={form.amount} onChange={e=>setForm({...form, amount: e.target.value})} placeholder="Amount" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Payment Cycle</label>
+              <select value={form.cycle} onChange={e=>setForm({...form, cycle: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }}>
+                <option value="Monthly">Monthly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Half-Yearly">Half-Yearly</option>
+                <option value="Annual">Annual</option>
+              </select>
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Icon & Color</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={form.icon} onChange={e=>setForm({...form, icon: e.target.value})} placeholder="Icon" style={{ flex: 1, background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+                <input type="color" value={form.color} onChange={e=>setForm({...form, color: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, padding: "4px", borderRadius: 8, height: 38, width: 40 }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Start Date</label>
+              <input type="date" value={form.startDate} onChange={e=>setForm({...form, startDate: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>End Date (Leave blank if none)</label>
+              <input type="date" value={form.endDate} onChange={e=>setForm({...form, endDate: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>More Information</label>
+              <input value={form.moreInfo} onChange={e=>setForm({...form, moreInfo: e.target.value})} placeholder="Policy No, Details, etc." style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+            </div>
+            
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, color: COLORS.textMuted }}>Upload Policy Document</label>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  if (file.size > 2.5 * 1024 * 1024) {
+                    alert("File is too large! Please keep it under 2.5MB to save in browser memory.");
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    setForm({...form, docName: file.name, docData: ev.target.result});
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "5px 12px", borderRadius: 8 }} />
+              
+              {form.docName && (
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
+                  <div style={{fontSize:11, color:COLORS.primary}}>📎 {form.docName}</div>
+                  {form.docData && (
+                    <button onClick={() => {
+                      const a = document.createElement('a');
+                      a.href = form.docData;
+                      a.download = form.docName;
+                      a.click();
+                    }} style={{ background: "transparent", color: COLORS.text, border: `1px solid ${COLORS.border}`, padding: "2px 8px", borderRadius: 4, cursor: "pointer", fontSize: 10 }}>Download</button>
+                  )}
+                </div>
+              )}
+            </div>
+          
