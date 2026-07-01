@@ -5883,7 +5883,7 @@ function useLocalStorage(key, seed) {
 }
 
 // ─── Income Add/Edit Modal ────────────────────────────────────────────────────
-function IncomeModal({ onClose, onSave, editing, banks }) {
+function IncomeModal({ onClose, onSave, editing, banks, creditCards }) {
   const SOURCES = ["Salary","Freelancing","Rental","Business","Dividend","Interest","Bonus","Gift","Other"];
   const ICONS   = { Salary:"💼", Freelancing:"💻", Rental:"🏠", Business:"🏢", Dividend:"📈", Interest:"🏦", Bonus:"🎁", Gift:"🎀", Other:"💰" };
   const SCOLORS = { Salary:COLORS.primary, Freelancing:COLORS.secondary, Rental:COLORS.accent, Business:"#06B6D4", Dividend:"#8B5CF6", Interest:"#F59E0B", Bonus:"#10B981", Gift:"#EC4899", Other:COLORS.textMuted };
@@ -5995,7 +5995,7 @@ const getDueInvestmentPayouts = (invList) => {
 };
 
 // ─── Live Income View ─────────────────────────────────────────────────────────
-function IncomeViewLive({ incomes, setIncomes, filter, banks, setDeletedTransactions, investments, setInvestments, insurance, setInsurance }) {
+function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDeletedTransactions, investments, setInvestments, insurance, setInsurance }) {
   const [showModal, setShowModal] = useState(false);
   const [editing,   setEditing]   = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -6441,7 +6441,7 @@ function IncomeViewLive({ incomes, setIncomes, filter, banks, setDeletedTransact
         </div>
       )}
 
-      {showModal && <IncomeModal banks={banks} onClose={()=>{ setShowModal(false); setEditing(null); }} onSave={handleSave} editing={editing} />}
+      {showModal && <IncomeModal banks={banks} creditCards={creditCards} onClose={()=>{ setShowModal(false); setEditing(null); }} onSave={handleSave} editing={editing} />}
 
       {confirmDel && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
@@ -9731,7 +9731,7 @@ export default function FinPilotAI({ user }) {
   const renderContent = () => {
     switch (active) {
       case "dashboard":    return <DashboardLive incomes={incomes} expenses={expenses} filter={filter} creditCards={creditCards} investments={investments} loans={loans} goals={goals} banks={banks} />;
-      case "income":       return <IncomeViewLive banks={banks} incomes={incomes} setIncomes={setIncomes} filter={filter} investments={investments} setInvestments={setInvestments} insurance={insurance} setInsurance={setInsurance} setDeletedTransactions={setDeletedTransactions} />;
+      case "income":       return <IncomeViewLive banks={banks} creditCards={creditCards} incomes={incomes} setIncomes={setIncomes} filter={filter} investments={investments} setInvestments={setInvestments} insurance={insurance} setInsurance={setInsurance} setDeletedTransactions={setDeletedTransactions} />;
       case "expense":      return <ExpenseViewLive banks={banks} expenses={expenses} setExpenses={setExpenses} filter={filter} subscriptions={subscriptions} setSubscriptions={setSubscriptions} insurance={insurance} setInsurance={setInsurance} investments={investments} setInvestments={setInvestments} loans={loans} setLoans={setLoans} creditCards={creditCards} setCreditCards={setCreditCards} setDeletedTransactions={setDeletedTransactions} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={user?.uid} />;
 
       case "budget":       return <BudgetErrorBoundary><BudgetViewLive expenses={expenses} budgets={budgets} setBudgets={setBudgets} filter={filter} incomes={incomes} investments={investments} insurance={insurance} loans={loans} /></BudgetErrorBoundary>;
