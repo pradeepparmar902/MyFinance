@@ -268,6 +268,7 @@ const DEFAULT_NAV = [
   { id: "subscriptions", icon: "🔄", label: "Subscriptions" },
   { id: "insurance", icon: "🛡️", label: "Insurance" },
   { id: "banks", icon: "🏛️", label: "Bank Accounts" },
+  { id: "interworkspace", icon: "🔀", label: "Inter-Workspace" },
   { id: "score", icon: "❤️", label: "Health Score" },
   { id: "ai", icon: "✨", label: "AI Advisor" },
   { id: "recyclebin", icon: "🗑️", label: "Recycle Bin" },
@@ -1237,7 +1238,7 @@ function WarrantyModal({ onClose, onSave, productName, uid, initialData }) {
 }
 
 // ─── Add Expense Modal ─────────────────────────────────────────────────────────
-function AddExpenseModal({ pastExpenses, onClose, onSave, initialData, creditCards, banks , vendorMaster, setVendorMaster, categoryMaster, setCategoryMaster , companyMaster, setCompanyMaster, platformMaster, setPlatformMaster, uid }) {
+function AddExpenseModal({ pastExpenses, onClose, onSave, initialData, creditCards, banks , vendorMaster, setVendorMaster, categoryMaster, setCategoryMaster , companyMaster, setCompanyMaster, platformMaster, setPlatformMaster, uid, workspaces = [], activeWorkspaceId = "" }) {
   const [step, setStep] = useState(1); // 1=details, 2=warranty
   const [showWarranty, setShowWarranty] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState(null);
@@ -1339,13 +1340,18 @@ function AddExpenseModal({ pastExpenses, onClose, onSave, initialData, creditCar
         description: initialData.description || initialData.notes || "",
         paymentMode: initialData.paymentMode || "Net Banking",
         bankId: initialData.bankId || "",
-        receiptUrl: initialData.receiptUrl || (typeof initialData.receipt === 'string' ? initialData.receipt : "")
+        receiptUrl: initialData.receiptUrl || (typeof initialData.receipt === 'string' ? initialData.receipt : ""),
+        paidByOther: !!initialData.paidByWorkspaceId,
+        paidByWorkspaceId: initialData.paidByWorkspaceId || "",
+        paidForWorkspaceId: initialData.paidForWorkspaceId || "",
+        paidForWorkspaceName: initialData.paidForWorkspaceName || ""
       };
     }
     return {
       storeName: "", date: new Date().toISOString().split("T")[0], category: "Shopping",
       amount: "", productName: "", companyName: "", platformName: "", description: "", paymentMode: "UPI", hasWarranty: false, warrantyData: null,
-      bankId: ""
+      bankId: "",
+      paidByOther: false, paidByWorkspaceId: "", paidForWorkspaceId: "", paidForWorkspaceName: ""
     };
   });
 
@@ -1704,9 +1710,51 @@ function AddExpenseModal({ pastExpenses, onClose, onSave, initialData, creditCar
               </div>
             </div>
 
+            {/* Inter-Workspace toggle */}
+            {/* Inter-Workspace toggle */}
+            {form.paidForWorkspaceId ? (
+              <div style={{ background: "rgba(16,185,129,0.08)", border: `1px solid rgba(16,185,129,0.3)`, borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                 <div style={{ fontSize: 24 }}>🔀</div>
+                 <div>
+                    <div style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>Cost incurred by {form.paidForWorkspaceName || "another workspace"}</div>
+                    <div style={{ fontSize: 10.5, color: COLORS.textMuted, marginTop: 2 }}>Paid by this workspace</div>
+                 </div>
+              </div>
+            ) : (
+              <div style={{ background: form.paidByOther ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${form.paidByOther ? "rgba(245,158,11,0.3)" : COLORS.border}`, borderRadius: 12, padding: "12px 14px", transition: "all 0.2s" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: COLORS.text, fontWeight: 500 }}>🔀 Paid by someone else?</div>
+                    <div style={{ fontSize: 10.5, color: COLORS.textMuted, marginTop: 2 }}>Assign this expense to another workspace</div>
+                  </div>
+                  <button onClick={() => setForm(p => ({ ...p, paidByOther: !p.paidByOther, bankId: !p.paidByOther ? "" : p.bankId }))} style={{
+                    width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", flexShrink: 0,
+                    background: form.paidByOther ? "#F59E0B" : "rgba(255,255,255,0.15)", transition: "background 0.2s"
+                  }}>
+                    <div style={{ position: "absolute", top: 3, left: form.paidByOther ? 23 : 3, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                  </button>
+                </div>
+                
+                {form.paidByOther && workspaces && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed rgba(255,255,255,0.1)` }}>
+                    <label style={{ fontSize: 11, color: COLORS.textMuted, display: 'block', marginBottom: 5 }}>SELECT PAYER WORKSPACE *</label>
+                    <select 
+                      value={form.paidByWorkspaceId} 
+                      onChange={e => setForm(p => ({ ...p, paidByWorkspaceId: e.target.value }))} 
+                      style={iStyle}
+                    >
+                       <option value="">-- Select Workspace --</option>
+                       {workspaces.filter(w => w.id !== activeWorkspaceId).map(w => (
+                         <option key={w.id} value={w.id}>{w.name}</option>
+                       ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
                         
-            {form.paymentMode !== 'Cash' && form.paymentMode !== 'EMI' && (
-              <div>
+            {!form.paidByOther && form.paymentMode !== 'Cash' && form.paymentMode !== 'EMI' && (
+              <div style={{ marginTop: 16 }}>
                 <label style={{ fontSize: 11, color: COLORS.textMuted, display: 'block', marginBottom: 5 }}>SELECT PAYMENT ACCOUNT</label>
                 <select 
                   value={form.bankId || form.creditCardId || ""} 
@@ -5856,38 +5904,42 @@ const SEED_CREDIT_CARDS = [];
 const SEED_EXPENSES = [];
 
 function useLocalStorage(key, seed) {
-  const [val, setVal] = useState(() => {
+  const [state, setState] = useState(() => {
     try {
       const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : seed;
-    } catch { return seed; }
+      return { key, val: stored ? JSON.parse(stored) : seed };
+    } catch { return { key, val: seed }; }
   });
 
-  useEffect(() => {
+  const keyRef = useRef(key);
+  keyRef.current = key;
+
+  let currentVal = state.val;
+  if (state.key !== key) {
     try {
       const stored = localStorage.getItem(key);
-      setVal(stored ? JSON.parse(stored) : seed);
-    } catch {
-      setVal(seed);
-    }
-  }, [key]);
+      currentVal = stored ? JSON.parse(stored) : seed;
+    } catch { currentVal = seed; }
+    setState({ key, val: currentVal });
+  }
 
   const set = (v) => {
-    setVal(prev => {
-      const next = typeof v === "function" ? v(prev) : v;
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-      return next;
+    setState(prev => {
+      const next = typeof v === "function" ? v(prev.val) : v;
+      try { localStorage.setItem(keyRef.current, JSON.stringify(next)); } catch {}
+      return { key: keyRef.current, val: next };
     });
   };
-  return [val, set];
+
+  return [currentVal, set];
 }
 
 // ─── Income Add/Edit Modal ────────────────────────────────────────────────────
-function IncomeModal({ onClose, onSave, editing, banks, creditCards }) {
+function IncomeModal({ onClose, onSave, editing, banks, creditCards, workspaces, activeWorkspaceId }) {
   const SOURCES = ["Salary","Freelancing","Rental","Business","Dividend","Interest","Bonus","Gift","Other"];
   const ICONS   = { Salary:"💼", Freelancing:"💻", Rental:"🏠", Business:"🏢", Dividend:"📈", Interest:"🏦", Bonus:"🎁", Gift:"🎀", Other:"💰" };
   const SCOLORS = { Salary:COLORS.primary, Freelancing:COLORS.secondary, Rental:COLORS.accent, Business:"#06B6D4", Dividend:"#8B5CF6", Interest:"#F59E0B", Bonus:"#10B981", Gift:"#EC4899", Other:COLORS.textMuted };
-  const [form, setForm] = useState(editing || { date: new Date().toISOString().split("T")[0], source:"Salary", amount:"", note:"" });
+  const [form, setForm] = useState(editing || { date: new Date().toISOString().split("T")[0], source:"Salary", amount:"", note:"", receivedFromWorkspaceId:"" });
   const iStyle = { background:"#1a2236", border:`1px solid ${COLORS.border}`, borderRadius:9, padding:"9px 12px", color:COLORS.text, fontSize:13, width:"100%", outline:"none", boxSizing:"border-box", caretColor:"#6C63FF" };
   const valid = form.source && form.amount > 0 && form.date;
   return (
@@ -5933,7 +5985,49 @@ function IncomeModal({ onClose, onSave, editing, banks, creditCards }) {
             <label style={{ fontSize:11, color:COLORS.textMuted, display:"block", marginBottom:5 }}>NOTE / DESCRIPTION</label>
             <input type="text" placeholder="e.g. Infosys June salary, freelance project..." value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} style={iStyle} />
           </div>
-          <button onClick={() => { if(valid){ onSave({ ...form, amount:parseFloat(form.amount), icon:ICONS[form.source]||"💰", color:SCOLORS[form.source]||COLORS.textMuted }); onClose(); }}} disabled={!valid} style={{ padding:"13px", borderRadius:12, border:"none", background:valid?`linear-gradient(135deg,${COLORS.secondary},#059669)`:"rgba(255,255,255,0.08)", color:valid?"#fff":COLORS.textMuted, fontSize:14, fontWeight:700, cursor:valid?"pointer":"not-allowed", marginTop:4 }}>
+          
+          {workspaces && workspaces.length > 1 && (
+            <div style={{ background: form.receivedFromWorkspaceId ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${form.receivedFromWorkspaceId ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.05)"}`, borderRadius: 12, padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 13, color: form.receivedFromWorkspaceId ? "#10b981" : COLORS.text, fontWeight: 600 }}>Received from another workspace?</div>
+                  <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>Records a payment transferred from another user</div>
+                </div>
+                <div 
+                  onClick={() => setForm(p => ({ ...p, receivedFromWorkspaceId: p.receivedFromWorkspaceId ? "" : (workspaces.find(w => w.id !== activeWorkspaceId)?.id || "") }))}
+                  style={{ width: 44, height: 24, borderRadius: 12, background: form.receivedFromWorkspaceId ? "#10b981" : "rgba(255,255,255,0.1)", position: "relative", cursor: "pointer", transition: "all 0.2s" }}
+                >
+                  <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: form.receivedFromWorkspaceId ? 22 : 2, transition: "all 0.2s" }} />
+                </div>
+              </div>
+              
+              {form.receivedFromWorkspaceId && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed rgba(16,185,129,0.2)` }}>
+                  <label style={{ fontSize: 11, color: COLORS.textMuted, display: "block", marginBottom: 6 }}>SELECT SENDER WORKSPACE</label>
+                  <select 
+                    value={form.receivedFromWorkspaceId} 
+                    onChange={e => setForm(p => ({ ...p, receivedFromWorkspaceId: e.target.value }))}
+                    style={{ background: "rgba(0,0,0,0.3)", border: `1px solid rgba(16,185,129,0.2)`, padding: "10px 14px", color: COLORS.text, fontSize: 13, borderRadius: 10, width: "100%", outline: "none" }}
+                  >
+                    {workspaces.filter(w => w.id !== activeWorkspaceId).map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button onClick={() => { 
+            if(valid){ 
+              const finalData = { ...form, amount:parseFloat(form.amount), icon:ICONS[form.source]||"💰", color:SCOLORS[form.source]||COLORS.textMuted };
+              if (finalData.receivedFromWorkspaceId) {
+                finalData.receivedFromWorkspaceName = workspaces.find(w => w.id === finalData.receivedFromWorkspaceId)?.name || "";
+              }
+              onSave(finalData); 
+              onClose(); 
+            }
+          }} disabled={!valid} style={{ padding:"13px", borderRadius:12, border:"none", background:valid?`linear-gradient(135deg,${COLORS.secondary},#059669)`:"rgba(255,255,255,0.08)", color:valid?"#fff":COLORS.textMuted, fontSize:14, fontWeight:700, cursor:valid?"pointer":"not-allowed", marginTop:4 }}>
             {editing ? "Update Income" : "Save Income"}
           </button>
         </div>
@@ -5995,7 +6089,7 @@ const getDueInvestmentPayouts = (invList) => {
 };
 
 // ─── Live Income View ─────────────────────────────────────────────────────────
-function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDeletedTransactions, investments, setInvestments, insurance, setInsurance }) {
+function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDeletedTransactions, investments, setInvestments, insurance, setInsurance, workspaces = [], activeWorkspaceId = "" }) {
   const [showModal, setShowModal] = useState(false);
   const [editing,   setEditing]   = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -6035,6 +6129,31 @@ function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDe
       setIncomes(p => p.map(i => i.id===editing.id ? {...data, id:finalId} : i));
     } else {
       setIncomes(p => [{...data, id:finalId, trxNo: getNextTrxNo("INC", p)}, ...p]);
+      
+      // Inject Expense into Sender Workspace if applicable
+      if (data.receivedFromWorkspaceId) {
+        try {
+          const otherWsKey = `finpilot_expenses_${data.receivedFromWorkspaceId}`;
+          const otherExpenses = JSON.parse(localStorage.getItem(otherWsKey) || "[]");
+          const myWsName = workspaces.find(w => w.id === activeWorkspaceId)?.name || "Another Workspace";
+          otherExpenses.push({
+            id: "e" + Date.now() + "_injected",
+            trxNo: "TRX-" + Date.now().toString().slice(-6),
+            date: data.date,
+            amount: parseFloat(data.amount),
+            merchant: `Transfer to ${myWsName}`,
+            category: "Transfer",
+            paidForWorkspaceId: activeWorkspaceId,
+            paidForWorkspaceName: myWsName,
+            injectedBy: activeWorkspaceId,
+            note: data.note || "Money sent to another workspace"
+          });
+          localStorage.setItem(otherWsKey, JSON.stringify(otherExpenses));
+          window.dispatchEvent(new Event('storage'));
+        } catch (e) {
+          console.error("Failed to inject expense into sender workspace", e);
+        }
+      }
     }
 
     if (editing && editing.linkedMaturity) {
@@ -6441,7 +6560,7 @@ function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDe
         </div>
       )}
 
-      {showModal && <IncomeModal banks={banks} creditCards={creditCards} onClose={()=>{ setShowModal(false); setEditing(null); }} onSave={handleSave} editing={editing} />}
+      {showModal && <IncomeModal banks={banks} creditCards={creditCards} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onClose={()=>{ setShowModal(false); setEditing(null); }} onSave={handleSave} editing={editing} />}
 
       {confirmDel && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
@@ -7399,7 +7518,7 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
   );
 }
 
-function ExpenseViewLive({ expenses, setExpenses, filter, subscriptions, setSubscriptions, insurance, setInsurance, investments, setInvestments, loans, setLoans, creditCards, setCreditCards, banks, setDeletedTransactions , vendorMaster, setVendorMaster, categoryMaster, setCategoryMaster, companyMaster, setCompanyMaster, platformMaster, setPlatformMaster, uid }) {
+function ExpenseViewLive({ expenses, setExpenses, filter, subscriptions, setSubscriptions, insurance, setInsurance, investments, setInvestments, loans, setLoans, creditCards, setCreditCards, banks, setDeletedTransactions , vendorMaster, setVendorMaster, categoryMaster, setCategoryMaster, companyMaster, setCompanyMaster, platformMaster, setPlatformMaster, uid, workspaces, activeWorkspaceId }) {
   const [catFilter, setCatFilter] = useState("All");
   const [showAdd,   setShowAdd]   = useState(false);
   const [payingEmi, setPayingEmi] = useState(null);
@@ -7845,10 +7964,36 @@ function ExpenseViewLive({ expenses, setExpenses, filter, subscriptions, setSubs
         />
       )}
       {showAdd && (
-        <AddExpenseModal pastExpenses={expenses} banks={banks} creditCards={creditCards} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={uid} onClose={() => setShowAdd(false)} onSave={(t) => {
+        <AddExpenseModal pastExpenses={expenses} banks={banks} creditCards={creditCards} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={uid} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onClose={() => setShowAdd(false)} onSave={(t) => {
           const itemWithCat = { ...t, cat: t.category || t.cat };
-          if (editing) setExpenses(p => p.map(x => x.id===editing.id ? {...x,...itemWithCat, trxNo: x.trxNo || getNextTrxNo("EXP", p)} : x));
-          else setExpenses(p => [{...itemWithCat, id:"e"+Date.now(), trxNo: getNextTrxNo("EXP", p)}, ...p]);
+          const expId = editing ? editing.id : "e"+Date.now();
+          const expItem = {...itemWithCat, id: expId, trxNo: editing?.trxNo || getNextTrxNo("EXP", expenses)};
+          
+          if (itemWithCat.paidByOther && itemWithCat.paidByWorkspaceId) {
+             const targetKey = "fp_expenses_" + itemWithCat.paidByWorkspaceId;
+             try {
+                const targetStr = localStorage.getItem(targetKey);
+                let targetExpenses = targetStr ? JSON.parse(targetStr) : [];
+                const existingIdx = targetExpenses.findIndex(e => e.id === expId);
+                const forWorkspace = workspaces?.find(w => w.id === activeWorkspaceId);
+                const interWSTransaction = {
+                   ...expItem,
+                   bankId: "", 
+                   creditCardId: "",
+                   paidForWorkspaceId: activeWorkspaceId,
+                   paidForWorkspaceName: forWorkspace ? forWorkspace.name : "Another Workspace"
+                };
+                if (existingIdx >= 0) targetExpenses[existingIdx] = interWSTransaction;
+                else targetExpenses = [interWSTransaction, ...targetExpenses];
+                localStorage.setItem(targetKey, JSON.stringify(targetExpenses));
+                
+                // Dispatch event so other tabs/instances update
+                window.dispatchEvent(new Event("storage"));
+             } catch(err) { console.error("Error saving cross-workspace transaction", err); }
+          }
+
+          if (editing) setExpenses(p => p.map(x => x.id===editing.id ? expItem : x));
+          else setExpenses(p => [expItem, ...p]);
           setShowAdd(false);
         }} initialData={editing} />
       )}
@@ -8316,12 +8461,93 @@ const getDueInsurance = (insuranceList) => {
 };
 
 
-function BanksViewLive({ banks, setBanks, expenses, incomes }) {
+function BanksViewLive({ banks, setBanks, expenses, setExpenses, incomes, setIncomes, workspaces, activeWorkspaceId }) {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({ name:"", type:"Savings", initialBalance:"", accountNumber:"", color:COLORS.primary });
   const [showPassbook, setShowPassbook] = useState(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferForm, setTransferForm] = useState({ fromBankId: "", toBankId: "", amount: "", date: new Date().toISOString().split('T')[0], note: "", isCrossWorkspace: false, toWorkspaceId: "" });
+
+  const handleTransferSubmit = () => {
+    if (!transferForm.fromBankId || !transferForm.toBankId || !transferForm.amount || !transferForm.date) {
+      return alert("Please fill in all required fields.");
+    }
+    if (transferForm.fromBankId === transferForm.toBankId) {
+      return alert("Source and destination accounts must be different.");
+    }
+    
+    const amt = parseFloat(transferForm.amount);
+    if (isNaN(amt) || amt <= 0) return alert("Enter a valid amount.");
+
+    const fromBank = banks.find(b => b.id === transferForm.fromBankId);
+    let toBank = { id: "", name: "another workspace" };
+    if (!transferForm.isCrossWorkspace) {
+      toBank = banks.find(b => b.id === transferForm.toBankId) || toBank;
+    } else {
+      toBank.name = workspaces?.find(w => w.id === transferForm.toWorkspaceId)?.name || "Another Workspace";
+    }
+
+    const commonId = "trf_" + Date.now();
+    
+    // Create Expense in From Bank
+    const expItem = {
+      id: commonId + "_exp",
+      bankId: fromBank.id,
+      amount: amt,
+      date: transferForm.date,
+      title: "Transfer to " + toBank.name,
+      cat: "Transfer",
+      category: "Transfer",
+      icon: "🔄",
+      color: COLORS.primary,
+      paymentMode: "Net Banking"
+    };
+    if (transferForm.note) expItem.note = transferForm.note;
+
+    // Create Income in To Bank
+    const incItem = {
+      id: commonId + "_inc",
+      bankId: toBank.id,
+      amount: amt,
+      date: transferForm.date,
+      source: "Other",
+      note: "Transfer from " + fromBank.name + (transferForm.note ? ` (${transferForm.note})` : ""),
+      icon: "🔄",
+      color: COLORS.primary
+    };
+
+    setExpenses(p => [expItem, ...(p || [])]);
+    
+    if (transferForm.isCrossWorkspace && transferForm.toWorkspaceId) {
+      try {
+        const otherWsKey = `finpilot_incomes_${transferForm.toWorkspaceId}`;
+        const otherIncomes = JSON.parse(localStorage.getItem(otherWsKey) || "[]");
+        otherIncomes.push({
+          id: commonId + "_injected",
+          trxNo: "TRX-" + Date.now().toString().slice(-6),
+          date: transferForm.date,
+          amount: amt,
+          source: "Other",
+          note: `Transfer from ${workspaces?.find(w => w.id === activeWorkspaceId)?.name || "Another Workspace"}${transferForm.note ? ` (${transferForm.note})` : ""}`,
+          icon: "🔄",
+          color: COLORS.primary,
+          receivedFromWorkspaceId: activeWorkspaceId,
+          receivedFromWorkspaceName: workspaces?.find(w => w.id === activeWorkspaceId)?.name || "Another Workspace"
+        });
+        localStorage.setItem(otherWsKey, JSON.stringify(otherIncomes));
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {
+        console.error("Failed to inject income into receiver workspace", e);
+      }
+    } else {
+      setIncomes(p => [incItem, ...(p || [])]);
+    }
+    
+    setShowTransferModal(false);
+    setTransferForm({ fromBankId: "", toBankId: "", amount: "", date: new Date().toISOString().split('T')[0], note: "", isCrossWorkspace: false, toWorkspaceId: "" });
+  };
 
   const handleSave = () => {
     if (!form.name || form.initialBalance==="") return alert("Name and Initial Balance are required.");
@@ -8348,7 +8574,10 @@ function BanksViewLive({ banks, setBanks, expenses, incomes }) {
           <div style={{ fontSize:24, fontWeight:700, color:COLORS.text }}>Bank Accounts</div>
           <div style={{ fontSize:14, color:COLORS.textMuted, marginTop:4 }}>Manage your accounts & balances</div>
         </div>
-        <button onClick={() => { setForm({ name:"", type:"Savings", initialBalance:"", accountNumber:"", color:COLORS.primary }); setEditItem(null); setShowForm(true); }} style={{ background:COLORS.primary, color:"#fff", border:"none", padding:"10px 16px", borderRadius:12, fontWeight:600, cursor:"pointer" }}>+ Add Bank</button>
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={() => setShowTransferModal(true)} style={{ background:"rgba(255,255,255,0.05)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 16px", borderRadius:12, fontWeight:600, cursor:"pointer" }}>🔄 Transfer Funds</button>
+          <button onClick={() => { setForm({ name:"", type:"Savings", initialBalance:"", accountNumber:"", color:COLORS.primary }); setEditItem(null); setShowForm(true); }} style={{ background:COLORS.primary, color:"#fff", border:"none", padding:"10px 16px", borderRadius:12, fontWeight:600, cursor:"pointer" }}>+ Add Bank</button>
+        </div>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:16 }}>
@@ -8480,6 +8709,78 @@ function BanksViewLive({ banks, setBanks, expenses, incomes }) {
 
       {showPassbook && (
          <PassbookModal bank={banks.find(b => b.id === showPassbook)} incomes={incomes} expenses={expenses} onClose={() => setShowPassbook(null)} />
+      )}
+      {showTransferModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(4px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#0d1526", width:"90%", maxWidth: 450, borderRadius:20, padding:24, border:`1px solid ${COLORS.border}`, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+            <div style={{ fontSize:18, fontWeight:700, color:COLORS.text, marginBottom:20 }}>Transfer Funds</div>
+            
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:13, color:COLORS.textMuted, marginBottom:6 }}>From Account *</div>
+              <select value={transferForm.fromBankId} onChange={e=>setTransferForm({...transferForm, fromBankId:e.target.value})} style={{ width:"100%", background:"rgba(255,255,255,0.03)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 14px", borderRadius:10, outline:"none", boxSizing:"border-box" }}>
+                <option value="">— Select Account —</option>
+                {(banks||[]).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            
+            {workspaces && workspaces.length > 1 && (
+              <div style={{ background: transferForm.isCrossWorkspace ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${transferForm.isCrossWorkspace ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.05)"}`, borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: transferForm.isCrossWorkspace ? "#10b981" : COLORS.text, fontWeight: 600 }}>Transfer to another workspace?</div>
+                    <div style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 }}>Send money directly to another user</div>
+                  </div>
+                  <div 
+                    onClick={() => setTransferForm(p => ({ ...p, isCrossWorkspace: !p.isCrossWorkspace, toBankId: "", toWorkspaceId: !p.isCrossWorkspace ? (workspaces.find(w => w.id !== activeWorkspaceId)?.id || "") : "" }))}
+                    style={{ width: 44, height: 24, borderRadius: 12, background: transferForm.isCrossWorkspace ? "#10b981" : "rgba(255,255,255,0.1)", position: "relative", cursor: "pointer", transition: "all 0.2s" }}
+                  >
+                    <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: transferForm.isCrossWorkspace ? 22 : 2, transition: "all 0.2s" }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div style={{ marginBottom:16 }}>
+              {transferForm.isCrossWorkspace ? (
+                <>
+                  <div style={{ fontSize:13, color:COLORS.textMuted, marginBottom:6 }}>To Workspace *</div>
+                  <select value={transferForm.toWorkspaceId} onChange={e=>setTransferForm({...transferForm, toWorkspaceId:e.target.value})} style={{ width:"100%", background:"rgba(255,255,255,0.03)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 14px", borderRadius:10, outline:"none", boxSizing:"border-box" }}>
+                    {workspaces.filter(w => w.id !== activeWorkspaceId).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize:13, color:COLORS.textMuted, marginBottom:6 }}>To Account *</div>
+                  <select value={transferForm.toBankId} onChange={e=>setTransferForm({...transferForm, toBankId:e.target.value})} style={{ width:"100%", background:"rgba(255,255,255,0.03)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 14px", borderRadius:10, outline:"none", boxSizing:"border-box" }}>
+                    <option value="">— Select Account —</option>
+                    {(banks||[]).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </>
+              )}
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+              <div>
+                <div style={{ fontSize:13, color:COLORS.textMuted, marginBottom:6 }}>Amount (₹) *</div>
+                <input type="number" inputMode="numeric" value={transferForm.amount} onChange={e=>setTransferForm({...transferForm, amount:e.target.value})} placeholder="0" style={{ width:"100%", background:"rgba(255,255,255,0.03)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 14px", borderRadius:10, outline:"none", boxSizing:"border-box" }} />
+              </div>
+              <div>
+                <div style={{ fontSize:13, color:COLORS.textMuted, marginBottom:6 }}>Date *</div>
+                <input type="date" value={transferForm.date} onChange={e=>setTransferForm({...transferForm, date:e.target.value})} style={{ width:"100%", background:"rgba(255,255,255,0.03)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 14px", borderRadius:10, outline:"none", boxSizing:"border-box" }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:13, color:COLORS.textMuted, marginBottom:6 }}>Notes (Optional)</div>
+              <input type="text" value={transferForm.note} onChange={e=>setTransferForm({...transferForm, note:e.target.value})} placeholder="e.g. For house rent" style={{ width:"100%", background:"rgba(255,255,255,0.03)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 14px", borderRadius:10, outline:"none", boxSizing:"border-box" }} />
+            </div>
+
+            <div style={{ display:"flex", gap:12 }}>
+              <button onClick={()=>setShowTransferModal(false)} style={{ flex:1, padding:"12px", background:"rgba(255,255,255,0.05)", border:"none", borderRadius:10, color:COLORS.text, fontWeight:600, cursor:"pointer" }}>Cancel</button>
+              <button onClick={handleTransferSubmit} style={{ flex:1, padding:"12px", background:COLORS.primary, border:"none", borderRadius:10, color:"#fff", fontWeight:600, cursor:"pointer" }}>Transfer</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -9338,7 +9639,79 @@ function AdminSettingsViewLive({ computedNav, customNav, setCustomNav, vendorMas
     </div>
   );
 }
+function InterWorkspaceViewLive({ workspaces, activeWorkspaceId }) {
+  const [crossTransactions, setCrossTransactions] = useState([]);
+  
+  useEffect(() => {
+     let all = [];
+     for (let ws of workspaces) {
+        try {
+           const str = localStorage.getItem("fp_expenses_" + ws.id);
+           if (str) {
+              const exp = JSON.parse(str);
+              // Find expenses that have paidForWorkspaceId or paidByWorkspaceId
+              const inter = exp.filter(e => e.paidForWorkspaceId).map(e => ({
+                 ...e,
+                 payerName: ws.name,
+                 payerId: ws.id,
+                 payeeName: e.paidForWorkspaceName || "Another Workspace"
+              }));
+              all = [...all, ...inter];
+           }
+        } catch(e) {}
+     }
+     // Sort by date descending
+     all.sort((a,b) => new Date(b.date) - new Date(a.date));
+     setCrossTransactions(all);
+  }, [workspaces, activeWorkspaceId]);
 
+  return (
+     <div style={{ flex: 1, padding: 32, display: "flex", flexDirection: "column", gap: 24, overflowY: "auto" }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.text, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 32 }}>🔀</span> Inter-Workspace Transactions
+        </div>
+        <div style={{ fontSize: 15, color: COLORS.textMuted, marginTop: -16 }}>
+          Transactions paid by one workspace on behalf of another.
+        </div>
+        
+        <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 20, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead>
+              <tr style={{ background: "rgba(255,255,255,0.03)", borderBottom: `1px solid ${COLORS.border}` }}>
+                 <th style={{ padding: "16px 20px", color: COLORS.textMuted, fontSize: 13, fontWeight: 600 }}>Date</th>
+                 <th style={{ padding: "16px 20px", color: COLORS.textMuted, fontSize: 13, fontWeight: 600 }}>Expense / Store</th>
+                 <th style={{ padding: "16px 20px", color: COLORS.textMuted, fontSize: 13, fontWeight: 600 }}>Amount</th>
+                 <th style={{ padding: "16px 20px", color: COLORS.textMuted, fontSize: 13, fontWeight: 600 }}>Paid By</th>
+                 <th style={{ padding: "16px 20px", color: COLORS.textMuted, fontSize: 13, fontWeight: 600 }}>Paid For</th>
+              </tr>
+            </thead>
+            <tbody>
+              {crossTransactions.length === 0 ? (
+                 <tr>
+                   <td colSpan={5} style={{ padding: 40, textAlign: "center", color: COLORS.textMuted, fontSize: 15 }}>No inter-workspace transactions found.</td>
+                 </tr>
+              ) : crossTransactions.map(t => (
+                 <tr key={t.id} style={{ borderBottom: `1px solid rgba(255,255,255,0.05)` }}>
+                   <td style={{ padding: "16px 20px", color: COLORS.text, fontSize: 14 }}>{new Date(t.date).toLocaleDateString()}</td>
+                   <td style={{ padding: "16px 20px", color: COLORS.text, fontSize: 14 }}>
+                      <div style={{ fontWeight: 600 }}>{t.storeName || t.productName}</div>
+                      <div style={{ fontSize: 12, color: COLORS.textMuted }}>{t.category}</div>
+                   </td>
+                   <td style={{ padding: "16px 20px", color: COLORS.danger, fontSize: 15, fontWeight: 700 }}>₹{parseFloat(t.amount).toLocaleString("en-IN")}</td>
+                   <td style={{ padding: "16px 20px" }}>
+                      <div style={{ background: "rgba(108,99,255,0.15)", color: COLORS.primary, padding: "4px 10px", borderRadius: 12, display: "inline-block", fontSize: 13, fontWeight: 600 }}>{t.payerName}</div>
+                   </td>
+                   <td style={{ padding: "16px 20px" }}>
+                      <div style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", padding: "4px 10px", borderRadius: 12, display: "inline-block", fontSize: 13, fontWeight: 600 }}>{t.payeeName}</div>
+                   </td>
+                 </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+     </div>
+  );
+}
 
 
 
@@ -9731,8 +10104,8 @@ export default function FinPilotAI({ user }) {
   const renderContent = () => {
     switch (active) {
       case "dashboard":    return <DashboardLive incomes={incomes} expenses={expenses} filter={filter} creditCards={creditCards} investments={investments} loans={loans} goals={goals} banks={banks} />;
-      case "income":       return <IncomeViewLive banks={banks} creditCards={creditCards} incomes={incomes} setIncomes={setIncomes} filter={filter} investments={investments} setInvestments={setInvestments} insurance={insurance} setInsurance={setInsurance} setDeletedTransactions={setDeletedTransactions} />;
-      case "expense":      return <ExpenseViewLive banks={banks} expenses={expenses} setExpenses={setExpenses} filter={filter} subscriptions={subscriptions} setSubscriptions={setSubscriptions} insurance={insurance} setInsurance={setInsurance} investments={investments} setInvestments={setInvestments} loans={loans} setLoans={setLoans} creditCards={creditCards} setCreditCards={setCreditCards} setDeletedTransactions={setDeletedTransactions} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={user?.uid} />;
+      case "income":       return <IncomeViewLive banks={banks} creditCards={creditCards} incomes={incomes} setIncomes={setIncomes} filter={filter} investments={investments} setInvestments={setInvestments} insurance={insurance} setInsurance={setInsurance} setDeletedTransactions={setDeletedTransactions} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
+      case "expense":      return <ExpenseViewLive banks={banks} expenses={expenses} setExpenses={setExpenses} filter={filter} subscriptions={subscriptions} setSubscriptions={setSubscriptions} insurance={insurance} setInsurance={setInsurance} investments={investments} setInvestments={setInvestments} loans={loans} setLoans={setLoans} creditCards={creditCards} setCreditCards={setCreditCards} setDeletedTransactions={setDeletedTransactions} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={user?.uid} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
 
       case "budget":       return <BudgetErrorBoundary><BudgetViewLive expenses={expenses} budgets={budgets} setBudgets={setBudgets} filter={filter} incomes={incomes} investments={investments} insurance={insurance} loans={loans} /></BudgetErrorBoundary>;
       case "investments":  return <InvestmentsViewLive investments={investments} setInvestments={setInvestments} goals={goals} banks={banks} creditCards={creditCards} expenses={expenses} incomes={incomes} />;
@@ -9741,7 +10114,8 @@ export default function FinPilotAI({ user }) {
             case "creditcards":  return <CreditCardsViewLive creditCards={creditCards} setCreditCards={setCreditCards} expenses={expenses} />;
       case "subscriptions":return <SubscriptionsView subscriptions={subscriptions} setSubscriptions={setSubscriptions} categoryMaster={[]} banks={banks} creditCards={creditCards} expenses={expenses} />;
       case "insurance":    return <InsuranceView insurance={insurance} setInsurance={setInsurance} banks={banks} creditCards={creditCards} expenses={expenses} incomes={incomes} goals={goals} />;
-      case "banks":        return <BanksViewLive banks={banks} setBanks={setBanks} expenses={expenses} incomes={incomes} />;
+      case "banks":        return <BanksViewLive banks={banks} setBanks={setBanks} expenses={expenses} setExpenses={setExpenses} incomes={incomes} setIncomes={setIncomes} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
+      case "interworkspace":return <InterWorkspaceViewLive workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
       case "score":        return <HealthScoreView />;
       case "retirement":   return <RetirementView />;
       case "freedom":      return <FreedomCalcView />;
@@ -9817,6 +10191,10 @@ export default function FinPilotAI({ user }) {
         input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,textarea:-webkit-autofill,select:-webkit-autofill {
           -webkit-box-shadow:0 0 0 1000px #1a2236 inset!important; box-shadow:0 0 0 1000px #1a2236 inset!important;
           -webkit-text-fill-color:#F1F5F9!important; caret-color:#6C63FF!important; border-radius:9px!important;
+        }
+        select option {
+          background-color: #0d1526;
+          color: #f1f5f9;
         }
         ::selection{background:rgba(108,99,255,0.35);color:#fff;} ::-moz-selection{background:rgba(108,99,255,0.35);color:#fff;}
         input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;opacity:0;}
