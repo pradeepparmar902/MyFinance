@@ -4,14 +4,33 @@ import FinPilotAI from './FinPilotAI.jsx'
 import Auth from './Auth.jsx'
 import { auth, db } from './firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore'
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let snapshotUnsubscribe = null;
+    const lastActive = localStorage.getItem('fp_last_active');
+    const now = Date.now();
+    
+    // If inactive for more than 30 mins, force logout to clear stale local data
+    if (lastActive && (now - parseInt(lastActive, 10) > 30 * 60 * 1000)) {
+      localStorage.clear();
+      signOut(auth);
+    }
+    
+    localStorage.setItem('fp_last_active', Date.now().toString());
+
+    const handleActivity = () => {
+      localStorage.setItem('fp_last_active', Date.now().toString());
+    };
+
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+
+    const authUnsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
           const userRef = doc(db, "users", currentUser.uid);
@@ -25,24 +44,57 @@ function App() {
             return;
           }
 
+          // Session ID logic to prevent concurrent logins
+          let localSessionId = localStorage.getItem('fp_session_id');
+          if (!localSessionId) {
+            localSessionId = Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('fp_session_id', localSessionId);
+          }
+
           // Update user details
           await setDoc(userRef, {
             email: currentUser.email || "",
             phone: currentUser.phoneNumber || "",
-            lastUsed: serverTimestamp()
+            lastUsed: serverTimestamp(),
+            currentSessionId: localSessionId
           }, { merge: true });
           
+          // Listen for concurrent logins
+          if (snapshotUnsubscribe) snapshotUnsubscribe();
+          snapshotUnsubscribe = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (data.currentSessionId && data.currentSessionId !== localSessionId) {
+                // Immediately hide the app content before the blocking alert
+                document.body.innerHTML = "<div style='height: 100vh; display: flex; align-items: center; justify-content: center; background: #0B1120; color: #F8FAFC; font-family: sans-serif;'><h2>Session Expired</h2></div>";
+                localStorage.clear();
+                signOut(auth);
+                setTimeout(() => {
+                  alert("You have been logged out because your account was accessed from another device.");
+                  window.location.reload();
+                }, 100);
+              }
+            }
+          });
+
           setUser(currentUser);
         } catch (err) {
           console.error("Auth sync error:", err);
           setUser(currentUser); // Fallback
         }
       } else {
+        if (snapshotUnsubscribe) { snapshotUnsubscribe(); snapshotUnsubscribe = null; }
         setUser(null);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      authUnsubscribe();
+      if (snapshotUnsubscribe) snapshotUnsubscribe();
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+    };
   }, []);
 
   if (loading) {

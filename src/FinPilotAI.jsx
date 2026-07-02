@@ -25,6 +25,7 @@ const COLORS = {
   secondary: "#00C896",
   accent: "#FFB547",
   danger: "#FF5B5B",
+  success: "#10b981",
   bg: "#0F172A",
   bgCard: "rgba(255,255,255,0.06)",
   bgCardHover: "rgba(255,255,255,0.1)",
@@ -263,6 +264,7 @@ const DEFAULT_NAV = [
   { id: "budget", icon: "🎯", label: "Budget" },
   { id: "goals", icon: "🏆", label: "Goals" },
   { id: "emi", icon: "🏦", label: "EMI & Loan" },
+  { id: "friendlyloans", icon: "🤝", label: "Friendly Loans" },
   { id: "investments", icon: "📈", label: "Banking & Inv." },
   { id: "creditcards", icon: "💳", label: "Credit Cards" },
   { id: "subscriptions", icon: "🔄", label: "Subscriptions" },
@@ -4744,17 +4746,45 @@ function EMIViewLive({ loans, setLoans, goals, banks, creditCards }) {
                     <tbody>
                       {calculateAmortization(editItem).map((row, i) => {
                         const isPaid = editItem.payments && i < editItem.payments.length;
+                        const paymentData = isPaid ? editItem.payments[i] : null;
+                        const expTx = paymentData && paymentData.expenseId ? (expenses || []).find(e => e.id === paymentData.expenseId) : null;
+                        
+                        let bankName = "";
+                        if (expTx) {
+                          const bId = expTx.bankId;
+                          const b = bId ? [...(banks||[]), ...(creditCards||[])].find(x => x.id === bId) : null;
+                          bankName = b ? b.name : (expTx.paymentMode || "Cash");
+                        }
+                        
                         return (
                         <tr key={i} style={{ borderBottom:`1px solid rgba(255,255,255,0.03)`, color: isPaid ? COLORS.success : COLORS.text }}>
                           <td style={{ textAlign:"left",padding:"10px 0" }}>
                             <div style={{ fontWeight:600 }}>{row.month}</div>
                             <div style={{ fontSize:9,color:COLORS.textMuted }}>{row.date} {isPaid ? "✓" : ""}</div>
+                            {isPaid && paymentData.payDate && <div style={{ fontSize: 9, color: COLORS.success, marginTop: 2 }}>Paid on: {formatLocalDateString(paymentData.payDate)}</div>}
+                            {isPaid && bankName && <div style={{ fontSize: 9, color: COLORS.textMuted }}>Via: {bankName}</div>}
                           </td>
                           <td style={{ padding:"10px 0" }}>{Math.round(row.emi).toLocaleString("en-IN")}</td>
                           <td style={{ padding:"10px 0", color: COLORS.primary }}>{Math.round(row.principal).toLocaleString("en-IN")}</td>
                           <td style={{ padding:"10px 0", color: COLORS.danger }}>{Math.round(row.interest).toLocaleString("en-IN")}</td>
                           <td style={{ padding:"10px 0", color: COLORS.textMuted }}>{row.rate}%</td>
-                          <td style={{ padding:"10px 0", fontWeight:700 }}>₹{Math.round(row.balance).toLocaleString("en-IN")}</td>
+                          <td style={{ padding:"10px 0", fontWeight:700 }}>
+                            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 }}>
+                              ₹{Math.round(row.balance).toLocaleString("en-IN")}
+                              {isPaid && expTx && (
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation();
+                                    if (onEditExpense) onEditExpense(expTx, editItem);
+                                  }}
+                                  style={{ background: "transparent", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 13, padding: 0 }}
+                                  title="Edit Transaction"
+                                >
+                                  ✎
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                         );
                       })}
@@ -6089,10 +6119,18 @@ const getDueInvestmentPayouts = (invList) => {
 };
 
 // ─── Live Income View ─────────────────────────────────────────────────────────
-function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDeletedTransactions, investments, setInvestments, insurance, setInsurance, workspaces = [], activeWorkspaceId = "" }) {
+function IncomeViewLive({ incomes, setIncomes, initialEditTx, clearInitialEditTx, onCloseEditModal, filter, banks, creditCards, setDeletedTransactions, investments, setInvestments, insurance, setInsurance, workspaces = [], activeWorkspaceId = "" }) {
   const [showModal, setShowModal] = useState(false);
   const [editing,   setEditing]   = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
+
+  useEffect(() => {
+    if (initialEditTx) {
+      setEditing(initialEditTx);
+      setShowModal(true);
+      if (clearInitialEditTx) clearInitialEditTx();
+    }
+  }, [initialEditTx, clearInitialEditTx]);
 
   const duePayouts = getDueInvestmentPayouts(investments);
   const dueInsPayouts = getDueInsurancePayouts(insurance);
@@ -6560,7 +6598,7 @@ function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDe
         </div>
       )}
 
-      {showModal && <IncomeModal banks={banks} creditCards={creditCards} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onClose={()=>{ setShowModal(false); setEditing(null); }} onSave={handleSave} editing={editing} />}
+      {showModal && <IncomeModal banks={banks} creditCards={creditCards} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onClose={()=>{ setShowModal(false); setEditing(null); if (onCloseEditModal) onCloseEditModal(); }} onSave={handleSave} editing={editing} />}
 
       {confirmDel && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
@@ -6582,12 +6620,22 @@ function IncomeViewLive({ incomes, setIncomes, filter, banks, creditCards, setDe
 // ─── Live Expense View (with edit/delete added to existing) ───────────────────
 
 // ─── Insurance View ────────────────────────────────────────────────────────────
-function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, incomes, goals }) {
+function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, incomes, goals, onEditExpense, onEditIncome, initialEditItem, clearInitialEditItem }) {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [insFilter, setInsFilter] = useState("All");
+  const [ledgerSearch, setLedgerSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({ name:"", provider:"", type:"Medical Insurance", icon:"🛡️", amount:"", coverage:"", cycle:"Annual", startDate:"", endDate:"", moreInfo:"", docLink:"", docName:"", docData:"", color:COLORS.primary, bankId:"", maturityDate:"", maturityAmount:"", status:"Active", linkedGoal:"" });
+
+  useEffect(() => {
+    if (initialEditItem) {
+      setEditItem(initialEditItem);
+      setForm({...initialEditItem});
+      setShowForm(true);
+      if (clearInitialEditItem) clearInitialEditItem();
+    }
+  }, [initialEditItem, clearInitialEditItem]);
 
   const ledgerItem = editItem ? {
     ...editItem,
@@ -6997,6 +7045,69 @@ function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, 
             const totalRecvOD = overdueReceivable.reduce((s,d) => s + (parseFloat(d.amount)||0), 0);
             const totalRecvDue = dueThisMonthReceivable.reduce((s,d) => s + (parseFloat(d.amount)||0), 0);
             
+            const filteredHistoryItems = historyItems.filter(p => {
+              if (!ledgerSearch) return true;
+              let desc = "";
+              if (p.type === 'paid') {
+                const exp = (expenses || []).find(e => e.id === p.expenseId);
+                const bId = exp ? exp.bankId : null;
+                const b = bId ? [...(banks||[]), ...(creditCards||[])].find(x => x.id === bId) : null;
+                const bankName = b ? b.name : (exp ? (exp.paymentMode || "Cash") : "—");
+                desc = `Paid Premium ${exp ? exp.trxNo || "" : ""} ${bankName}`.toLowerCase();
+              } else {
+                const inc = (incomes || []).find(i => i.id === p.incomeId);
+                const bId = inc ? inc.bankId : null;
+                const b = bId ? [...(banks||[]), ...(creditCards||[])].find(x => x.id === bId) : null;
+                const bankName = b ? b.name : "";
+                desc = `Received Benefit ${bankName}`.toLowerCase();
+              }
+              return desc.includes(ledgerSearch.toLowerCase()) || (p.amount && p.amount.toString().includes(ledgerSearch));
+            });
+
+            const downloadCSV = () => {
+              const headers = ["Date", "Type", "Description", "Paid", "Received", "Net"];
+              let csvContent = headers.join(",") + "\n";
+              
+              filteredHistoryItems.forEach(p => {
+                let desc = "";
+                let paidVal = "";
+                let recvVal = "";
+                let netVal = 0;
+                let typeStr = "";
+                if (p.type === 'paid') {
+                  const exp = (expenses || []).find(e => e.id === p.expenseId);
+                  const bId = exp ? exp.bankId : null;
+                  const b = bId ? [...(banks||[]), ...(creditCards||[])].find(x => x.id === bId) : null;
+                  const bankName = b ? b.name : (exp ? (exp.paymentMode || "Cash") : "—");
+                  desc = `Paid Premium${bankName ? ' • ' + bankName : ''}`;
+                  paidVal = p.amount;
+                  netVal = -p.amount;
+                  typeStr = "Premium";
+                } else {
+                  const inc = (incomes || []).find(i => i.id === p.incomeId);
+                  const bId = inc ? inc.bankId : null;
+                  const b = bId ? [...(banks||[]), ...(creditCards||[])].find(x => x.id === bId) : null;
+                  const bankName = b ? b.name : "";
+                  desc = `Received Benefit${bankName ? ' • ' + bankName : ''}`;
+                  recvVal = p.amount;
+                  netVal = p.amount;
+                  typeStr = "Benefit";
+                }
+                if (desc.includes(",")) desc = `"${desc}"`;
+                const date = formatLocalDateString(p.date).replace(/,/g, '');
+                csvContent += `${date},${typeStr},${desc},${paidVal},${recvVal},${netVal}\n`;
+              });
+              
+              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.setAttribute("download", `Insurance_Ledger_${ledgerItem.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split("T")[0]}.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            };
+            
             return (
               <div style={{ flex: "1 1 35%", position: "sticky", top: 16, display: "flex", flexDirection: "column", gap: 14 }}>
                 {/* ── Box 1: Payable – Premiums ── */}
@@ -7077,8 +7188,22 @@ function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, 
 
                 {/* ── Transaction Ledger ── */}
                 <div style={{ background: "rgba(0,0,0,0.15)", padding: 16, borderRadius: 14, border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>🧾</span> Transaction Ledger
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>🧾</span> Transaction Ledger
+                    </div>
+                    <button onClick={downloadCSV} style={{ background: "transparent", color: COLORS.primary, border: `1px solid ${COLORS.primary}`, padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>⬇️</span> CSV
+                    </button>
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <input 
+                      type="text" 
+                      placeholder="Search transactions..." 
+                      value={ledgerSearch} 
+                      onChange={e => setLedgerSearch(e.target.value)}
+                      style={{ width: "100%", background: "rgba(0,0,0,0.2)", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8, fontSize: 12, outline: "none", boxSizing: "border-box" }}
+                    />
                   </div>
                   
                   <div style={{ overflowX: "auto", border: `1px solid ${COLORS.border}`, borderRadius: 8, background: "rgba(0,0,0,0.2)", maxHeight: 300, overflowY: "auto" }}>
@@ -7092,7 +7217,7 @@ function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, 
                         </tr>
                       </thead>
                       <tbody>
-                        {historyItems.map((p, idx) => {
+                        {filteredHistoryItems.map((p, idx) => {
                           let desc = "";
                           let paidVal = "";
                           let recvVal = "";
@@ -7120,6 +7245,9 @@ function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, 
                             netColor = "#10b981";
                           }
                           
+                          const expTx = (expenses || []).find(e => e.id === p.expenseId);
+                          const incTx = (incomes || []).find(i => i.id === p.incomeId);
+                          
                           return (
                             <tr key={"hist-row-" + idx}>
                               <td>
@@ -7135,16 +7263,29 @@ function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, 
                               <td style={{ textAlign: "right", color: netColor, fontWeight: 700 }}>
                                 {netVal < 0 ? "-" : "+"}₹{Math.abs(netVal).toLocaleString("en-IN")}
                               </td>
+                              <td style={{ textAlign: "center" }}>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation();
+                                    if (p.type === 'paid' && expTx && onEditExpense) onEditExpense(expTx, editItem);
+                                    else if (p.type === 'received' && incTx && onEditIncome) onEditIncome(incTx, editItem);
+                                  }}
+                                  style={{ background: "transparent", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 13 }}
+                                  title="Edit Transaction"
+                                >
+                                  ✎
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
-                        {historyItems.length === 0 && (
+                        {filteredHistoryItems.length === 0 && (
                           <tr>
-                            <td colSpan={4} style={{ padding: "20px", textAlign: "center", color: COLORS.textMuted }}>No transactions yet.</td>
+                            <td colSpan={5} style={{ padding: "20px", textAlign: "center", color: COLORS.textMuted }}>No transactions found.</td>
                           </tr>
                         )}
                       </tbody>
-                      {historyItems.length > 0 && (
+                      {filteredHistoryItems.length > 0 && (
                         <tfoot>
                           <tr>
                             <td>Total</td>
@@ -7213,44 +7354,115 @@ function InsuranceView({ insurance, setInsurance, banks, creditCards, expenses, 
 }
 
 // ─── Credit Cards View ───────────────────────────────────────────────────────
-function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
+function CreditCardsViewLive({ creditCards, setCreditCards, expenses, onEditExpense, initialPassbook, clearInitialPassbook }) {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [activeBreakup, setActiveBreakup] = useState(null);
   
-  const [form, setForm] = useState({ name:"", network:"Visa", limit:"", billingDate:"15", color:COLORS.primary });
+  const [showPassbook, setShowPassbook] = useState(null);
+  const [passbookFilter, setPassbookFilter] = useState("");
+
+  useEffect(() => {
+    if (initialPassbook) {
+      setShowPassbook(initialPassbook);
+      if (clearInitialPassbook) clearInitialPassbook();
+    }
+  }, [initialPassbook, clearInitialPassbook]);
+
+  const [form, setForm] = useState({ name:"", network:"Visa", limit:"", billingDate:"15", dueDay:"5", openingBalance:"", asOnDate:new Date().toISOString().split("T")[0], color:COLORS.primary });
+
+  const downloadCSV = () => {
+    if (!showPassbook) return;
+    const breakdown = getCardBreakdown(showPassbook, expenses);
+    const sortedTx = [...breakdown.txsWithOpening].sort((a,b) => new Date(b.date) - new Date(a.date));
+    
+    const headers = ["Date", "Description", "Category", "Amount"];
+    let csvContent = headers.join(",") + "\n";
+    
+    sortedTx.forEach(tx => {
+      let desc = tx.storeName || tx.name || "Expense";
+      if (desc.includes(",")) desc = `"${desc}"`;
+      let cat = tx.cat || "—";
+      let amount = tx.amount || 0;
+      let date = tx.date.split("-").reverse().join("-");
+      csvContent += `${date},${desc},${cat},${amount}\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Statement_${showPassbook.name}_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const totalLimit = creditCards ? creditCards.reduce((s, c) => s + parseFloat(c.limit||0), 0) : 0;
   
+  const getCardBreakdown = (cc, expensesList) => {
+    const txs = expensesList ? expensesList.filter(e => e.paymentMode === "Credit Card" && e.creditCardId === cc.id) : [];
+    let txsWithOpening = [...txs];
+    if (cc.openingBalance && cc.asOnDate) {
+      txsWithOpening.push({ amount: parseFloat(cc.openingBalance), date: cc.asOnDate, name: "Opening Balance" });
+    }
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const billDay = parseInt(cc.billingDate) || 1;
+    const dueDay = parseInt(cc.dueDay) || 5;
+
+    let lastBillDate = new Date(today.getFullYear(), today.getMonth(), billDay);
+    if (today.getDate() < billDay) lastBillDate.setMonth(lastBillDate.getMonth() - 1);
+    
+    let prevBillDate = new Date(lastBillDate);
+    prevBillDate.setMonth(prevBillDate.getMonth() - 1);
+    
+    let dueDate = new Date(lastBillDate);
+    if (dueDay <= billDay) dueDate.setMonth(dueDate.getMonth() + 1);
+    dueDate.setDate(dueDay);
+    dueDate.setHours(0,0,0,0);
+
+    let currentAmt = 0; let dueAmt = 0; let overdueAmt = 0;
+    
+    txsWithOpening.forEach(t => {
+      const txDate = new Date(t.date);
+      txDate.setHours(0,0,0,0);
+      const amt = parseFloat(t.amount || 0);
+      
+      if (txDate >= lastBillDate) {
+        currentAmt += amt;
+      } else if (txDate >= prevBillDate) {
+        if (today > dueDate) overdueAmt += amt;
+        else dueAmt += amt;
+      } else {
+        overdueAmt += amt;
+      }
+    });
+    return { currentAmt, dueAmt, overdueAmt, totalUsed: currentAmt + dueAmt + overdueAmt, txsWithOpening };
+  };
+
   // Calculate total used
-  const totalUsed = expenses ? expenses.filter(e => e.paymentMode === "Credit Card" && e.creditCardId).reduce((s, e) => s + parseFloat(e.amount||0), 0) : 0;
+  const totalUsed = (creditCards || []).reduce((s, cc) => s + getCardBreakdown(cc, expenses).totalUsed, 0);
   const totalAvail = totalLimit - totalUsed;
-  // Calculate global breakdown
-  let globalDue = 0;
-  let globalOverdue = 0;
-  let globalCurrent = 0;
   
+  // Calculate global breakdown
   const getBreakupData = (type) => {
     return (creditCards || []).map(cc => {
-      const allTx = expenses ? expenses.filter(e => e.paymentMode === "Credit Card" && e.creditCardId === cc.id) : [];
-      const today = new Date();
-      const billDay = parseInt(cc.billingDate) || 1;
-      let currentBillDate = new Date(today.getFullYear(), today.getMonth(), billDay);
-      if (today.getDate() < billDay) currentBillDate.setMonth(currentBillDate.getMonth() - 1);
-      let prevBillDate = new Date(currentBillDate);
-      prevBillDate.setMonth(prevBillDate.getMonth() - 1);
-      
+      const b = getCardBreakdown(cc, expenses);
       let amt = 0;
-      allTx.forEach(t => {
-        const txDate = new Date(t.date);
-        if (type === "current" && txDate >= currentBillDate) amt += parseFloat(t.amount||0);
-        else if (type === "due" && txDate >= prevBillDate && txDate < currentBillDate) amt += parseFloat(t.amount||0);
-        else if (type === "overdue" && txDate < prevBillDate) amt += parseFloat(t.amount||0);
-      });
+      if (type === "current") amt = b.currentAmt;
+      else if (type === "due") amt = b.dueAmt;
+      else if (type === "overdue") amt = b.overdueAmt;
       return { card: cc, amount: amt, date: cc.billingDate + "th" };
     }).filter(x => x.amount > 0);
   };
+
+  let globalDue = 0;
+  let globalOverdue = 0;
+  let globalCurrent = 0;
 
   if (creditCards) {
     globalDue = getBreakupData("due").reduce((s, x) => s + x.amount, 0);
@@ -7295,7 +7507,19 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 10, color: COLORS.textMuted }}>Billing Date</label>
-          <input type="number" min="1" max="31" value={form.billingDate} onChange={e=>setForm({...form, billingDate: e.target.value})} placeholder="Day of month (1-31)" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+          <input type="number" min="1" max="31" value={form.billingDate} onChange={e=>setForm({...form, billingDate: e.target.value})} placeholder="Day (1-31)" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 10, color: COLORS.textMuted }}>Due Day</label>
+          <input type="number" min="1" max="31" value={form.dueDay} onChange={e=>setForm({...form, dueDay: e.target.value})} placeholder="Day (1-31)" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 10, color: COLORS.textMuted }}>Opening Balance (₹)</label>
+          <input type="number" value={form.openingBalance} onChange={e=>setForm({...form, openingBalance: e.target.value})} placeholder="Unbilled/Overdue" style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 10, color: COLORS.textMuted }}>As on Date</label>
+          <input type="date" value={form.asOnDate} onChange={e=>setForm({...form, asOnDate: e.target.value})} style={{ background: "#0f172a", border: `1px solid ${COLORS.border}`, color: COLORS.text, padding: "8px 12px", borderRadius: 8 }} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 10, color: COLORS.textMuted }}>Card Color</label>
@@ -7313,7 +7537,8 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
       
       {(() => {
             if (!editItem) return <div style={{ flex: "1 1 35%" }}></div>;
-         const allTx = (expenses||[]).filter(e => e.paymentMode === "Credit Card" && e.bankId === editItem.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+         const breakdown = getCardBreakdown(editItem, expenses);
+         const allTx = [...breakdown.txsWithOpening].sort((a,b)=>new Date(b.date)-new Date(a.date));
          return (
             <div style={{ flex: "1 1 35%", position: "sticky", top: 16, background: "rgba(0,0,0,0.15)", padding: 20, borderRadius: 16, border: `1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -7357,7 +7582,7 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
           <div style={{ fontSize:18,fontWeight:700,color:COLORS.text }}>Credit Cards</div>
           <div style={{ fontSize:12,color:COLORS.textMuted }}>{creditCards?creditCards.length:0} active cards · Live tracking</div>
         </div>
-        <button onClick={() => { setEditItem(null); setForm({ name:"", network:"Visa", limit:"", billingDate:"15", color:COLORS.primary }); setShowForm(true); }} style={{ background: COLORS.primary, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add Card</button>
+        <button onClick={() => { setEditItem(null); setForm({ name:"", network:"Visa", limit:"", billingDate:"15", dueDay:"5", openingBalance:"", asOnDate:new Date().toISOString().split("T")[0], color:COLORS.primary }); setShowForm(true); }} style={{ background: COLORS.primary, color: "#fff", padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add Card</button>
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(80px,1fr))",gap:9,marginBottom:14 }}>
@@ -7395,37 +7620,13 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16 }}>
         {creditCards && creditCards.map((cc, i) => {
-          const usedAmt = expenses ? expenses.filter(e => e.paymentMode === "Credit Card" && e.creditCardId === cc.id).reduce((s, e) => s + parseFloat(e.amount||0), 0) : 0;
+          const breakdown = getCardBreakdown(cc, expenses);
+          const usedAmt = breakdown.totalUsed;
           const availAmt = (cc.limit||0) - usedAmt;
           const pct = Math.min(100, (usedAmt / (cc.limit||1))*100);
           
-          const allTx = expenses ? expenses.filter(e => e.paymentMode === "Credit Card" && e.creditCardId === cc.id) : [];
-          const recentTx = allTx.slice(0, 5);
+          const recentTx = [...breakdown.txsWithOpening].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0, 5);
           
-          // Calculate billing cycles
-          const today = new Date();
-          const billDay = parseInt(cc.billingDate) || 1;
-          
-          let currentBillDate = new Date(today.getFullYear(), today.getMonth(), billDay);
-          if (today.getDate() < billDay) {
-            currentBillDate.setMonth(currentBillDate.getMonth() - 1);
-          }
-          
-          let prevBillDate = new Date(currentBillDate);
-          prevBillDate.setMonth(prevBillDate.getMonth() - 1);
-          
-          let currentAmt = 0;
-          let dueAmt = 0;
-          let overdueAmt = 0;
-          
-          allTx.forEach(t => {
-            const txDate = new Date(t.date);
-            if (txDate >= currentBillDate) currentAmt += parseFloat(t.amount||0);
-            else if (txDate >= prevBillDate) dueAmt += parseFloat(t.amount||0);
-            else overdueAmt += parseFloat(t.amount||0);
-          });
-
-
           return (
           <Fragment key={i}>
             <div onClick={() => { setEditItem(cc); setForm(cc); setShowForm(true); }} style={{ background:"#1a2236",borderRadius:12,border:`1px solid ${COLORS.border}`,position:"relative",overflow:"hidden",cursor:"pointer" }}>
@@ -7455,6 +7656,10 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
                   <div>Billing Date: {cc.billingDate}th</div>
                   <div>{recentTx.length} Txns</div>
                 </div>
+                
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop: 12 }}>
+                  <button onClick={(e) => { e.stopPropagation(); setShowPassbook(cc); }} style={{ flex:1, background:"rgba(255,255,255,0.05)", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"8px", borderRadius:8, fontWeight:600, cursor:"pointer", fontSize:13 }}>📄 View Statement</button>
+                </div>
               </div>
             </div>
             
@@ -7469,10 +7674,10 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
                   ) : (
                     <div style={{ display: "grid", gap: 8 }}>
                       {recentTx.map(t => (
-                        <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${COLORS.border}55` }}>
+                        <div key={t.id || ("tx-"+Math.random())} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${COLORS.border}55` }}>
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{t.storeName}</div>
-                            <div style={{ fontSize: 10, color: COLORS.textMuted }}>{t.date} • {t.cat}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{t.storeName || t.name || "Expense"}</div>
+                            <div style={{ fontSize: 10, color: COLORS.textMuted }}>{t.date} • {t.cat || "—"}</div>
                           </div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.danger }}>₹{parseFloat(t.amount||0).toLocaleString("en-IN")}</div>
                         </div>
@@ -7514,17 +7719,111 @@ function CreditCardsViewLive({ creditCards, setCreditCards, expenses }) {
           </div>
         </div>
       )}
+
+      {showPassbook && (
+        <div style={{ position:"fixed", top:0, right:0, bottom:0, zIndex:100, display:"flex", justifyContent:"flex-end", pointerEvents:"none" }}>
+          <div style={{ pointerEvents:"auto", background:"#0F172A", width:750, height:"100vh", display:"flex", flexDirection:"column", borderLeft:`1px solid rgba(255,255,255,0.08)`, boxShadow:"-5px 0 25px rgba(0,0,0,0.5)" }}>
+            <div style={{ padding: 24, borderBottom: `1px solid rgba(255,255,255,0.08)`, display: "flex", justifyContent: "space-between", alignItems: "center", background:"rgba(255,255,255,0.03)" }}>
+              <div>
+                <div style={{ fontSize:18, fontWeight:700, color:"#F1F5F9" }}>Statement: {showPassbook.name}</div>
+                <div style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 4 }}>
+                  Total Used: <span style={{ color: COLORS.danger }}>
+                    ₹{getCardBreakdown(showPassbook, expenses).totalUsed.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <input 
+                  type="text" 
+                  placeholder="Filter statement..." 
+                  value={passbookFilter} 
+                  onChange={(e) => setPassbookFilter(e.target.value)}
+                  style={{ background: "rgba(0,0,0,0.2)", border: `1px solid rgba(255,255,255,0.1)`, color: COLORS.text, padding: "8px 12px", borderRadius: 8, fontSize: 13, width: 200, outline: "none" }}
+                />
+                <button onClick={downloadCSV} style={{ background: COLORS.primary, border: "none", color: "#fff", padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Download CSV
+                </button>
+                <button onClick={() => { setShowPassbook(null); setPassbookFilter(""); }} style={{ background:"transparent", border:"none", color:"#94A3B8", cursor:"pointer", fontSize:24 }}>×</button>
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+              {(() => {
+                const breakdown = getCardBreakdown(showPassbook, expenses);
+                const filteredTx = [...breakdown.txsWithOpening]
+                  .filter(tx => {
+                    if (!passbookFilter) return true;
+                    const q = passbookFilter.toLowerCase();
+                    const note = (tx.storeName || tx.name || "").toLowerCase();
+                    const cat = (tx.cat || "").toLowerCase();
+                    const amountStr = (tx.amount || 0).toString();
+                    return note.includes(q) || cat.includes(q) || amountStr.includes(q) || tx.date.includes(q);
+                  })
+                  .sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                if (filteredTx.length === 0) {
+                  return <div style={{ textAlign: "center", color: COLORS.textMuted, padding: 20 }}>No transactions found.</div>;
+                }
+
+                return (
+                  <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 12, overflow: "hidden" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 100px 100px 30px", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.04)", borderBottom: `1px solid rgba(255,255,255,0.08)`, fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase" }}>
+                      <div>Date</div>
+                      <div>Description</div>
+                      <div>Category</div>
+                      <div style={{ textAlign: "right" }}>Amount</div>
+                      <div></div>
+                    </div>
+                    {filteredTx.map((tx, i, arr) => {
+                      const isLast = i === arr.length - 1;
+                      const isOpening = tx.name === "Opening Balance" && !tx.id;
+                      return (
+                        <div key={tx.id || ("tx-"+i)} style={{ display: "grid", gridTemplateColumns: "80px 1fr 100px 100px 30px", gap: 12, padding: "12px 16px", borderBottom: isLast ? "none" : `1px solid rgba(255,255,255,0.04)`, fontSize: 13, alignItems: "center", color: COLORS.text }}>
+                          <div style={{ color: COLORS.textMuted, fontSize: 12 }}>{tx.date.split("-").reverse().join("-").substring(0, 5)}</div>
+                          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={tx.storeName || tx.name || "-"}>{tx.storeName || tx.name || "-"}</div>
+                          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: COLORS.secondary, fontSize: 12 }}>{tx.cat || "—"}</div>
+                          <div style={{ textAlign: "right", color: COLORS.danger, fontWeight: 600 }}>₹{parseFloat(tx.amount || 0).toLocaleString("en-IN")}</div>
+                          <div style={{ display: "flex", justifyContent: "center" }}>
+                            {!isOpening && (
+                              <button 
+                                onClick={() => { if (onEditExpense) onEditExpense(tx, showPassbook); }}
+                                style={{ background: "transparent", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 14 }}
+                                title="Edit Expense"
+                              >
+                                ✎
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ExpenseViewLive({ expenses, setExpenses, filter, subscriptions, setSubscriptions, insurance, setInsurance, investments, setInvestments, loans, setLoans, creditCards, setCreditCards, banks, setDeletedTransactions , vendorMaster, setVendorMaster, categoryMaster, setCategoryMaster, companyMaster, setCompanyMaster, platformMaster, setPlatformMaster, uid, workspaces, activeWorkspaceId }) {
+function ExpenseViewLive({ expenses, setExpenses, initialEditTx, clearInitialEditTx, onCloseEditModal, filter, subscriptions, setSubscriptions, insurance, setInsurance, investments, setInvestments, loans, setLoans, creditCards, setCreditCards, banks, setDeletedTransactions , vendorMaster, setVendorMaster, categoryMaster, setCategoryMaster, companyMaster, setCompanyMaster, platformMaster, setPlatformMaster, uid, workspaces, activeWorkspaceId }) {
   const [catFilter, setCatFilter] = useState("All");
   const [showAdd,   setShowAdd]   = useState(false);
   const [payingEmi, setPayingEmi] = useState(null);
   const [emiForm, setEmiForm] = useState({ date: "", amount: "", principal: "", interest: "" });
   const [editing,   setEditing]   = useState(null);
   const [viewingReceipt, setViewingReceipt] = useState(null); // { url, type } for in-app viewer
+  
+  useEffect(() => {
+    if (initialEditTx) {
+      setEditing(initialEditTx);
+      setShowAdd(true);
+      if (clearInitialEditTx) clearInitialEditTx();
+    }
+  }, [initialEditTx, clearInitialEditTx]);
+
   
   const [payingSub, setPayingSub] = useState(null);
   const [deletingExp, setDeletingExp] = useState(null);
@@ -7964,7 +8263,7 @@ function ExpenseViewLive({ expenses, setExpenses, filter, subscriptions, setSubs
         />
       )}
       {showAdd && (
-        <AddExpenseModal pastExpenses={expenses} banks={banks} creditCards={creditCards} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={uid} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onClose={() => setShowAdd(false)} onSave={(t) => {
+        <AddExpenseModal pastExpenses={expenses} banks={banks} creditCards={creditCards} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={uid} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onClose={() => { setShowAdd(false); if (onCloseEditModal) onCloseEditModal(); }} onSave={(t) => {
           const itemWithCat = { ...t, cat: t.category || t.cat };
           const expId = editing ? editing.id : "e"+Date.now();
           const expItem = {...itemWithCat, id: expId, trxNo: editing?.trxNo || getNextTrxNo("EXP", expenses)};
@@ -7995,6 +8294,7 @@ function ExpenseViewLive({ expenses, setExpenses, filter, subscriptions, setSubs
           if (editing) setExpenses(p => p.map(x => x.id===editing.id ? expItem : x));
           else setExpenses(p => [expItem, ...p]);
           setShowAdd(false);
+          if (onCloseEditModal) onCloseEditModal();
         }} initialData={editing} />
       )}
 
@@ -8308,6 +8608,7 @@ function DashboardLive({ incomes, expenses, filter, creditCards, investments, lo
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 const SUBS_SEED = [];
+const FRIENDLY_LOANS_SEED = [];
 
 const getDueStatusAndStyle = (dueDateStr) => {
   const today = new Date();
@@ -8461,13 +8762,20 @@ const getDueInsurance = (insuranceList) => {
 };
 
 
-function BanksViewLive({ banks, setBanks, expenses, setExpenses, incomes, setIncomes, workspaces, activeWorkspaceId }) {
+function BanksViewLive({ banks, setBanks, expenses, setExpenses, incomes, setIncomes, workspaces, activeWorkspaceId, initialPassbook, clearInitialPassbook, onEditExpense, onEditIncome }) {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({ name:"", type:"Savings", initialBalance:"", accountNumber:"", color:COLORS.primary });
   const [showPassbook, setShowPassbook] = useState(null);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  
+  useEffect(() => {
+    if (initialPassbook) {
+      setShowPassbook(initialPassbook);
+      if (clearInitialPassbook) clearInitialPassbook();
+    }
+  }, [initialPassbook, clearInitialPassbook]);
   const [transferForm, setTransferForm] = useState({ fromBankId: "", toBankId: "", amount: "", date: new Date().toISOString().split('T')[0], note: "", isCrossWorkspace: false, toWorkspaceId: "" });
 
   const handleTransferSubmit = () => {
@@ -8708,7 +9016,7 @@ function BanksViewLive({ banks, setBanks, expenses, setExpenses, incomes, setInc
       )}
 
       {showPassbook && (
-         <PassbookModal bank={banks.find(b => b.id === showPassbook)} incomes={incomes} expenses={expenses} onClose={() => setShowPassbook(null)} />
+         <PassbookModal bank={banks.find(b => b.id === showPassbook)} incomes={incomes} expenses={expenses} onClose={() => setShowPassbook(null)} onEditExpense={onEditExpense} onEditIncome={onEditIncome} />
       )}
       {showTransferModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(4px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -8786,7 +9094,7 @@ function BanksViewLive({ banks, setBanks, expenses, setExpenses, incomes, setInc
   );
 }
 
-function PassbookModal({ bank, incomes, expenses, onClose }) {
+function PassbookModal({ bank, incomes, expenses, onClose, onEditExpense, onEditIncome }) {
   const [drillDown, setDrillDown] = useState(null);
 
   const bInc = (incomes || []).filter(i => i.bankId === bank.id).map(i => ({
@@ -8807,9 +9115,29 @@ function PassbookModal({ bank, incomes, expenses, onClose }) {
   });
   merged.reverse();
 
+  const [passbookFilter, setPassbookFilter] = useState("");
+
+  const downloadCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Date,Description,Type,Amount,Balance\n";
+    const reversed = [...merged].reverse();
+    reversed.forEach(row => {
+      const desc = row.desc ? ` - ${row.desc}` : "";
+      const description = `"${row.title}${desc}"`;
+      csvContent += `${row.date},${description},${row.type},${row.amount},${row.balance}\n`;
+    });
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${bank.name}_Passbook.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div style={{ position:"fixed", top:0, right:0, bottom:0, zIndex:100, display:"flex", justifyContent:"flex-end", pointerEvents:"none" }}>
-      <div style={{ pointerEvents:"auto", background:"#0F172A", width:500, height:"100vh", display:"flex", flexDirection:"column", borderLeft:`1px solid rgba(255,255,255,0.08)`, boxShadow:"-5px 0 25px rgba(0,0,0,0.5)" }}>
+      <div style={{ pointerEvents:"auto", background:"#0F172A", width:750, height:"100vh", display:"flex", flexDirection:"column", borderLeft:`1px solid rgba(255,255,255,0.08)`, boxShadow:"-5px 0 25px rgba(0,0,0,0.5)" }}>
         {drillDown ? (
           <>
             <div style={{ padding:"24px", borderBottom:`1px solid rgba(255,255,255,0.08)`, display:"flex", justifyContent:"space-between", alignItems:"center", background:"rgba(255,255,255,0.03)" }}>
@@ -8817,7 +9145,18 @@ function PassbookModal({ bank, incomes, expenses, onClose }) {
                 <button onClick={() => setDrillDown(null)} style={{ background:"rgba(255,255,255,0.1)", border:"none", color:"#F1F5F9", cursor:"pointer", width:32, height:32, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>←</button>
                 <div style={{ fontSize:18, fontWeight:700, color:"#F1F5F9" }}>Transaction Details</div>
               </div>
-              <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#94A3B8", cursor:"pointer", fontSize:24 }}>×</button>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <button 
+                  onClick={() => {
+                    if (drillDown.type === "expense" && onEditExpense) onEditExpense(drillDown.raw, bank.id);
+                    else if (drillDown.type === "income" && onEditIncome) onEditIncome(drillDown.raw, bank.id);
+                  }}
+                  style={{ background: "rgba(255,255,255,0.1)", border: "none", color: COLORS.text, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13 }}
+                >
+                  ✎ Edit
+                </button>
+                <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#94A3B8", cursor:"pointer", fontSize:24 }}>×</button>
+              </div>
             </div>
             <div style={{ flex:1, overflowY:"auto", padding:24 }}>
                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -8845,40 +9184,86 @@ function PassbookModal({ bank, incomes, expenses, onClose }) {
           </>
         ) : (
           <>
-            <div style={{ padding:"24px", borderBottom:`1px solid rgba(255,255,255,0.08)`, display:"flex", justifyContent:"space-between", alignItems:"center", background:"rgba(255,255,255,0.03)" }}>
-              <div>
-                <div style={{ fontSize:18, fontWeight:700, color:"#F1F5F9" }}>📖 {bank.name} Passbook</div>
-                <div style={{ fontSize:12, color:"#94A3B8", marginTop:4 }}>Initial Balance: ₹{(bank.initialBalance||0).toLocaleString("en-IN")}</div>
+            <div style={{ padding: "20px 24px", borderBottom: `1px solid rgba(255,255,255,0.08)`, display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.03)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>{bank.name} Passbook</div>
+                  <div style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 4 }}>Initial Balance: ₹{(bank.initialBalance||0).toLocaleString("en-IN")}</div>
+                </div>
+                <div style={{ padding: "0 16px", borderLeft: `1px solid rgba(255,255,255,0.1)`, marginLeft: 16 }}>
+                  <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", fontWeight: 600, letterSpacing: 0.5 }}>Current Balance</div>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: currentBalance >= 0 ? COLORS.success : COLORS.danger }}>
+                    ₹{currentBalance.toLocaleString("en-IN")}
+                  </span>
+                </div>
               </div>
-              <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#94A3B8", cursor:"pointer", fontSize:24 }}>×</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <input 
+                  type="text" 
+                  placeholder="Filter passbook..." 
+                  value={passbookFilter} 
+                  onChange={(e) => setPassbookFilter(e.target.value)}
+                  style={{ background: "rgba(0,0,0,0.2)", border: `1px solid rgba(255,255,255,0.1)`, color: COLORS.text, padding: "8px 12px", borderRadius: 8, fontSize: 13, width: 200, outline: "none" }}
+                />
+                <button onClick={downloadCSV} style={{ background: COLORS.primary, border: "none", color: "#fff", padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Download CSV
+                </button>
+                <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#94A3B8", cursor:"pointer", fontSize:24 }}>×</button>
+              </div>
             </div>
             
-            <div style={{ flex:1, overflowY:"auto", padding:16 }}>
+            <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
               {merged.length === 0 ? (
-                <div style={{ textAlign:"center", padding:40, color:"#94A3B8" }}>No transactions found for this bank account.</div>
+                <div style={{ textAlign:"center", color:COLORS.textMuted, padding:20 }}>No transactions found for this bank account.</div>
               ) : (
-                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {merged.map((txn, i) => (
-                    <div key={txn.id + i} onClick={() => setDrillDown(txn)} style={{ cursor:"pointer", display:"grid", gridTemplateColumns:"65px 1fr 75px 85px", gap:8, background:"rgba(255,255,255,0.03)", padding:"12px 14px", borderRadius:12, alignItems:"center", border:`1px solid rgba(255,255,255,0.06)`, transition:"background 0.2s" }} onMouseOver={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"} onMouseOut={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}>
-                      <div style={{ fontSize:11, color:"#94A3B8" }}>{formatLocalDateString(txn.date)}</div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize:13, fontWeight:600, color:"#F1F5F9", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txn.title}</div>
-                        {txn.desc && <div style={{ fontSize:10, color:"#94A3B8", marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txn.desc}</div>}
+                <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 12, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 100px 100px 30px", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.04)", borderBottom: `1px solid rgba(255,255,255,0.08)`, fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase" }}>
+                    <div>Date</div>
+                    <div>Description</div>
+                    <div style={{ textAlign: "right" }}>Amount</div>
+                    <div style={{ textAlign: "right" }}>Balance</div>
+                    <div></div>
+                  </div>
+                  {merged.filter(txn => {
+                    if (!passbookFilter) return true;
+                    const q = passbookFilter.toLowerCase();
+                    const title = (txn.title || "").toLowerCase();
+                    const desc = (txn.desc || "").toLowerCase();
+                    const amountStr = txn.amount.toString();
+                    return title.includes(q) || desc.includes(q) || amountStr.includes(q) || txn.date.includes(q);
+                  }).map((txn, i, arr) => {
+                    const isLast = i === arr.length - 1;
+                    return (
+                      <div key={txn.id + i} onClick={() => setDrillDown(txn)} style={{ cursor:"pointer", display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 30px", gap:12, padding:"12px 16px", borderBottom: isLast ? "none" : `1px solid rgba(255,255,255,0.04)`, fontSize: 13, alignItems: "center", color: COLORS.text, transition:"background 0.2s" }} onMouseOver={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                        <div style={{ fontSize:11, color:"#94A3B8" }}>{formatLocalDateString(txn.date)}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize:13, fontWeight:600, color:"#F1F5F9", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txn.title}</div>
+                          {txn.desc && <div style={{ fontSize:10, color:"#94A3B8", marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txn.desc}</div>}
+                        </div>
+                        <div style={{ fontSize:13, fontWeight:700, textAlign:"right", color: txn.type==="income"?"#00C896":"#FF5B5B" }}>
+                          {txn.type==="income"?"+":"-"}₹{txn.amount.toLocaleString("en-IN")}
+                        </div>
+                        <div style={{ fontSize:13, fontWeight:700, textAlign:"right", color:"#F1F5F9" }}>
+                          ₹{txn.balance.toLocaleString("en-IN")}
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "center" }}>
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (txn.type === "expense" && onEditExpense) onEditExpense(txn.raw, bank.id);
+                              else if (txn.type === "income" && onEditIncome) onEditIncome(txn.raw, bank.id);
+                            }}
+                            style={{ background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: 14 }}
+                            title="Edit Transaction"
+                          >
+                            ✎
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ fontSize:13, fontWeight:700, textAlign:"right", color: txn.type==="income"?"#00C896":"#FF5B5B" }}>
-                        {txn.type==="income"?"+":"-"}₹{txn.amount.toLocaleString("en-IN")}
-                      </div>
-                      <div style={{ fontSize:13, fontWeight:700, textAlign:"right", color:"#F1F5F9" }}>
-                        ₹{txn.balance.toLocaleString("en-IN")}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
-            </div>
-            
-            <div style={{ padding:"16px 24px", borderTop:`1px solid rgba(255,255,255,0.08)`, background:"rgba(0,0,0,0.2)", display:"flex", justifyContent:"flex-end" }}>
-               <div style={{ fontSize:16, fontWeight:700, color:"#F1F5F9" }}>Current Balance: <span style={{ color:"#00C896" }}>₹{currentBalance.toLocaleString("en-IN")}</span></div>
             </div>
           </>
         )}
@@ -9713,6 +10098,441 @@ function InterWorkspaceViewLive({ workspaces, activeWorkspaceId }) {
   );
 }
 
+// ─── Friendly Loans View ────────────────────────────────────────────────────────
+function FriendlyLoansLive({ friendlyLoans, setFriendlyLoans, banks, setBanks, expenses, setExpenses, incomes, setIncomes }) {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  
+  const [showTransactionModal, setShowTransactionModal] = useState(null); // { person, type: 'GIVEN' | 'RECEIVED' }
+  const [txForm, setTxForm] = useState({ amount: "", date: new Date().toISOString().split("T")[0], bankId: "", note: "" });
+
+  const [showPassbook, setShowPassbook] = useState(null);
+  const [passbookFilter, setPassbookFilter] = useState("");
+
+  const downloadCSV = () => {
+    if (!showPassbook || !showPassbook.transactions) return;
+    
+    const headers = ["Date", "Description", "Mode", "Bank", "Given", "Received"];
+    const sortedTransactions = [...showPassbook.transactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+    const rows = sortedTransactions.map(tx => {
+      const bank = banks?.find(b => b.id === tx.bankId);
+      const mode = bank ? "Transfer" : "Cash";
+      const bankName = bank ? bank.name : "";
+      
+      // format date from YYYY-MM-DD to DD-MM-YYYY
+      const dParts = tx.date.split("-");
+      const displayDate = dParts.length === 3 ? `${dParts[2]}-${dParts[1]}-${dParts[0]}` : tx.date;
+      
+      return [
+        displayDate,
+        `"${(tx.note || "").replace(/"/g, '""')}"`,
+        mode,
+        `"${bankName.replace(/"/g, '""')}"`,
+        tx.type === "GIVEN" ? tx.amount : "",
+        tx.type === "RECEIVED" ? tx.amount : ""
+      ].join(",");
+    });
+    
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Passbook_${showPassbook.name}_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAddPerson = () => {
+    if (!newName.trim()) return;
+    setFriendlyLoans(p => [...(p||[]), {
+      id: "friend_" + Date.now(),
+      name: newName.trim(),
+      transactions: []
+    }]);
+    setNewName("");
+    setShowAddModal(false);
+  };
+
+  const handleDeletePerson = () => {
+    setFriendlyLoans(p => p.filter(x => x.id !== deleteConfirm.id));
+    setDeleteConfirm(null);
+  };
+
+  const handleTransaction = () => {
+    if (!txForm.amount || !txForm.bankId) return;
+    const isGiven = showTransactionModal.type === "GIVEN";
+    
+    if (showTransactionModal.editingTx) {
+      const isCash = txForm.bankId === "cash";
+      if (isGiven) {
+        setExpenses(p => (p||[]).map(e => e.id === showTransactionModal.editingTx.expenseId ? { ...e, amount: txForm.amount, date: txForm.date, bankId: isCash ? "" : txForm.bankId, paymentMode: isCash ? "Cash" : "Bank/Card", note: txForm.note } : e));
+      } else {
+        setIncomes(p => (p||[]).map(e => e.id === showTransactionModal.editingTx.incomeId ? { ...e, amount: txForm.amount, date: txForm.date, bankId: isCash ? "" : txForm.bankId, paymentMode: isCash ? "Cash" : "Bank Transfer", note: txForm.note } : e));
+      }
+
+      const updatedTx = { ...showTransactionModal.editingTx, amount: txForm.amount, date: txForm.date, bankId: txForm.bankId, note: txForm.note };
+
+      setFriendlyLoans(p => p.map(person => {
+        if (person.id === showTransactionModal.person.id) {
+          return { ...person, transactions: person.transactions.map(t => t.id === updatedTx.id ? updatedTx : t) };
+        }
+        return person;
+      }));
+
+      setShowPassbook(prev => prev && prev.id === showTransactionModal.person.id ? { ...prev, transactions: prev.transactions.map(t => t.id === updatedTx.id ? updatedTx : t) } : prev);
+      
+    } else {
+        let linkedId = null;
+      const isCash = txForm.bankId === "cash";
+      if (isGiven) {
+        const expId = "exp_" + Date.now();
+        linkedId = expId;
+        setExpenses(p => [...(p||[]), {
+          id: expId,
+          date: txForm.date,
+          amount: txForm.amount,
+          category: "Friendly Loan",
+          subCategory: "Given to " + showTransactionModal.person.name,
+          storeName: "Given to " + showTransactionModal.person.name,
+          paymentMode: isCash ? "Cash" : "Bank/Card",
+          bankId: isCash ? "" : txForm.bankId,
+          note: txForm.note || "Friendly Loan"
+        }]);
+      } else {
+        const incId = "inc_" + Date.now();
+        linkedId = incId;
+        setIncomes(p => [...(p||[]), {
+          id: incId,
+          date: txForm.date,
+          amount: txForm.amount,
+          source: "Received from " + showTransactionModal.person.name,
+          category: "Friendly Loan",
+          bankId: isCash ? "" : txForm.bankId,
+          paymentMode: isCash ? "Cash" : "Bank Transfer",
+          note: txForm.note || "Friendly Loan"
+        }]);
+      }
+
+      const newTx = {
+        id: "tx_" + Date.now(),
+        date: txForm.date,
+        amount: txForm.amount,
+        type: showTransactionModal.type,
+        bankId: txForm.bankId,
+        note: txForm.note,
+        ...(isGiven ? { expenseId: linkedId } : { incomeId: linkedId })
+      };
+
+      setFriendlyLoans(p => p.map(person => {
+        if (person.id === showTransactionModal.person.id) {
+          return { ...person, transactions: [...(person.transactions||[]), newTx] };
+        }
+        return person;
+      }));
+      
+      setShowPassbook(prev => prev && prev.id === showTransactionModal.person.id ? { ...prev, transactions: [...(prev.transactions||[]), newTx] } : prev);
+    }
+
+    setShowTransactionModal(null);
+    setTxForm({ amount: "", date: new Date().toISOString().split("T")[0], bankId: "", note: "" });
+  };
+
+  const getNetBalance = (transactions) => {
+    if (!transactions) return 0;
+    return transactions.reduce((acc, t) => {
+      const amt = parseFloat(t.amount) || 0;
+      if (t.type === "GIVEN") return acc + amt;
+      if (t.type === "RECEIVED") return acc - amt;
+      return acc;
+    }, 0);
+  };
+
+  return (
+    <div style={{ paddingBottom: 60 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:700, color:COLORS.text }}>Friendly Loans</div>
+          <div style={{ fontSize:13, color:COLORS.textMuted }}>Manage money given or received from friends & family</div>
+        </div>
+        <button 
+          onClick={() => setShowAddModal(true)}
+          style={{ background:COLORS.primary, color:"#fff", border:"none", padding:"8px 16px", borderRadius:8, fontWeight:600, cursor:"pointer" }}
+        >
+          + Add Person
+        </button>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(320px, 1fr))", gap:20 }}>
+        {(friendlyLoans || []).map(person => {
+          const netBalance = getNetBalance(person.transactions);
+          const isOwedToYou = netBalance > 0;
+          const isOweThem = netBalance < 0;
+          const isSettled = netBalance === 0;
+
+          return (
+            <div key={person.id} style={{ background:COLORS.bgCard, borderRadius:16, padding:20, border:`1px solid rgba(255,255,255,0.05)` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                <div style={{ fontSize:16, fontWeight:600 }}>{person.name}</div>
+                <button 
+                  onClick={() => setDeleteConfirm(person)}
+                  style={{ background:"none", border:"none", color:COLORS.danger, cursor:"pointer", opacity:0.7, fontSize: 18 }}
+                  title="Delete Person"
+                >×</button>
+              </div>
+
+              <div style={{ fontSize:12, color:COLORS.textMuted, marginBottom:4 }}>Net Balance</div>
+              <div style={{ 
+                fontSize:24, fontWeight:700, 
+                color: isOwedToYou ? COLORS.success : (isOweThem ? COLORS.danger : COLORS.text) 
+              }}>
+                {isOwedToYou ? "+" : (isOweThem ? "-" : "")} ₹{Math.abs(netBalance).toLocaleString("en-IN")}
+              </div>
+              <div style={{ fontSize:12, color:COLORS.textMuted, marginTop:4, minHeight:18 }}>
+                {isOwedToYou && "They owe you"}
+                {isOweThem && "You owe them"}
+                {isSettled && "Settled up"}
+              </div>
+
+              <div style={{ display:"flex", gap:10, marginTop:24 }}>
+                <button 
+                  onClick={() => setShowTransactionModal({ person, type: "GIVEN" })}
+                  style={{ flex:1, padding:"8px", background:`${COLORS.danger}20`, color:COLORS.danger, border:`1px solid ${COLORS.danger}50`, borderRadius:8, fontWeight:600, cursor:"pointer" }}
+                >Give</button>
+                <button 
+                  onClick={() => setShowTransactionModal({ person, type: "RECEIVED" })}
+                  style={{ flex:1, padding:"8px", background:`${COLORS.success}20`, color:COLORS.success, border:`1px solid ${COLORS.success}50`, borderRadius:8, fontWeight:600, cursor:"pointer" }}
+                >Receive</button>
+              </div>
+              
+              <button 
+                onClick={() => setShowPassbook(person)}
+                style={{ width:"100%", marginTop:10, padding:"8px", background:"transparent", border:`1px solid rgba(255,255,255,0.2)`, color:COLORS.text, borderRadius:8, fontSize: 13, cursor:"pointer" }}
+              >View Passbook</button>
+            </div>
+          );
+        })}
+        
+        {(!friendlyLoans || friendlyLoans.length === 0) && (
+          <div style={{ gridColumn:"1 / -1", textAlign:"center", padding:60, color:COLORS.textMuted, background:COLORS.bgCard, borderRadius:16, border:`1px dashed rgba(255,255,255,0.1)` }}>
+            <div style={{ fontSize:40, marginBottom:16, opacity:0.5 }}>🤝</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: COLORS.text }}>No ledgers created yet</div>
+            <div style={{ fontSize:13, marginTop:8 }}>Click "+ Add Person" to start tracking loans.</div>
+          </div>
+        )}
+      </div>
+
+      {showAddModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:COLORS.bgCard, width:"90%", maxWidth: 400, borderRadius:20, padding:24, border:`1px solid ${COLORS.border}`}}>
+            <div style={{ fontSize:18, fontWeight:700, marginBottom:20 }}>Add Person</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom: 24 }}>
+              <label style={{ fontSize:12, color:COLORS.textMuted }}>Person's Name</label>
+              <input 
+                value={newName} 
+                onChange={e => setNewName(e.target.value)} 
+                placeholder="e.g. Rahul" 
+                style={{ background:"#0f172a", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 12px", borderRadius:8, width:"100%", boxSizing:"border-box" }}
+              />
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:12 }}>
+              <button onClick={() => setShowAddModal(false)} style={{ background:"transparent", color:COLORS.text, border:`1px solid rgba(255,255,255,0.2)`, padding:"8px 16px", borderRadius:8, cursor:"pointer" }}>Cancel</button>
+              <button onClick={handleAddPerson} style={{ background:COLORS.primary, color:"#fff", border:"none", padding:"8px 16px", borderRadius:8, fontWeight:600, cursor:"pointer" }}>Add Person</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTransactionModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:COLORS.bg, width:"90%", maxWidth: 450, borderRadius:20, padding:24, border:`1px solid ${COLORS.border}`}}>
+            <div style={{ fontSize:18, fontWeight:700, marginBottom:8 }}>
+              {showTransactionModal.editingTx 
+                ? (showTransactionModal.type === "GIVEN" ? `Edit Given to ${showTransactionModal.person.name}` : `Edit Received from ${showTransactionModal.person.name}`)
+                : (showTransactionModal.type === "GIVEN" ? `Give Money to ${showTransactionModal.person.name}` : `Receive Money from ${showTransactionModal.person.name}`)
+              }
+            </div>
+            <div style={{ fontSize: 13, color: COLORS.textMuted, marginBottom: 20 }}>
+              {showTransactionModal.editingTx
+                ? "This will update the existing transaction and its linked expense/income."
+                : (showTransactionModal.type === "GIVEN" 
+                  ? "This will add a 'Given' record and create an Expense to reduce your bank balance." 
+                  : "This will add a 'Received' record and create an Income to increase your bank balance.")
+              }
+            </div>
+
+            <div style={{ display:"flex", flexDirection:"column", gap:16, marginBottom: 24 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <label style={{ fontSize:12, color:COLORS.textMuted }}>Amount (₹)</label>
+                <input 
+                  type="number"
+                  value={txForm.amount} 
+                  onChange={e => setTxForm({...txForm, amount: e.target.value})} 
+                  placeholder="0.00" 
+                  style={{ background:"#0f172a", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 12px", borderRadius:8, width:"100%", boxSizing:"border-box" }}
+                />
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <label style={{ fontSize:12, color:COLORS.textMuted }}>Date</label>
+                <input 
+                  type="date"
+                  value={txForm.date} 
+                  onChange={e => setTxForm({...txForm, date: e.target.value})} 
+                  style={{ background:"#0f172a", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 12px", borderRadius:8, width:"100%", boxSizing:"border-box" }}
+                />
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <label style={{ fontSize:12, color:COLORS.textMuted }}>Select Bank or Mode</label>
+                <select 
+                  value={txForm.bankId}
+                  onChange={e => setTxForm({...txForm, bankId: e.target.value})}
+                  style={{ background:"#0f172a", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 12px", borderRadius:8, width:"100%", boxSizing:"border-box" }}
+                >
+                  <option value="">-- Choose Account / Mode --</option>
+                  <option value="cash">Cash</option>
+                  {(banks || []).map(b => (
+                    <option key={b.id} value={b.id}>{b.name} ({b.type})</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <label style={{ fontSize:12, color:COLORS.textMuted }}>Note (Optional)</label>
+                <input 
+                  value={txForm.note} 
+                  onChange={e => setTxForm({...txForm, note: e.target.value})} 
+                  placeholder="e.g. Dinner split" 
+                  style={{ background:"#0f172a", border:`1px solid ${COLORS.border}`, color:COLORS.text, padding:"10px 12px", borderRadius:8, width:"100%", boxSizing:"border-box" }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:12 }}>
+              <button onClick={() => setShowTransactionModal(null)} style={{ background:"transparent", color:COLORS.text, border:`1px solid rgba(255,255,255,0.2)`, padding:"8px 16px", borderRadius:8, cursor:"pointer" }}>Cancel</button>
+              <button 
+                onClick={handleTransaction} 
+                disabled={!txForm.amount || !txForm.bankId}
+                style={{ 
+                  background: (!txForm.amount || !txForm.bankId) ? "rgba(255,255,255,0.08)" : (showTransactionModal.type === "GIVEN" ? `linear-gradient(135deg, ${COLORS.danger}, #ef4444)` : `linear-gradient(135deg, ${COLORS.success}, #059669)`), 
+                  color: (!txForm.amount || !txForm.bankId) ? COLORS.textMuted : "#ffffff", 
+                  border:"none", padding:"10px 20px", borderRadius:8, fontWeight:700, fontSize:14,
+                  cursor: (!txForm.amount || !txForm.bankId) ? "not-allowed" : "pointer"
+                }}
+              >
+                {showTransactionModal.type === "GIVEN" ? "Give Money" : "Receive Money"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPassbook && (
+        <div style={{ position:"fixed", top:0, right:0, bottom:0, zIndex:100, display:"flex", justifyContent:"flex-end", pointerEvents:"none" }}>
+          <div style={{ pointerEvents:"auto", background:"#0F172A", width:750, height:"100vh", display:"flex", flexDirection:"column", borderLeft:`1px solid rgba(255,255,255,0.08)`, boxShadow:"-5px 0 25px rgba(0,0,0,0.5)" }}>
+            <div style={{ padding: 24, borderBottom: `1px solid rgba(255,255,255,0.08)`, display: "flex", justifyContent: "space-between", alignItems: "center", background:"rgba(255,255,255,0.03)" }}>
+              <div>
+                <div style={{ fontSize:18, fontWeight:700, color:"#F1F5F9" }}>Passbook: {showPassbook.name}</div>
+                <div style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 4 }}>
+                  Net Balance: <span style={{ color: getNetBalance(showPassbook.transactions) > 0 ? COLORS.success : (getNetBalance(showPassbook.transactions) < 0 ? COLORS.danger : COLORS.text) }}>
+                    {getNetBalance(showPassbook.transactions) > 0 ? "+" : (getNetBalance(showPassbook.transactions) < 0 ? "-" : "")} ₹{Math.abs(getNetBalance(showPassbook.transactions)).toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <input 
+                  type="text" 
+                  placeholder="Filter passbook..." 
+                  value={passbookFilter} 
+                  onChange={(e) => setPassbookFilter(e.target.value)}
+                  style={{ background: "rgba(0,0,0,0.2)", border: `1px solid rgba(255,255,255,0.1)`, color: COLORS.text, padding: "8px 12px", borderRadius: 8, fontSize: 13, width: 200, outline: "none" }}
+                />
+                <button onClick={downloadCSV} style={{ background: COLORS.primary, border: "none", color: "#fff", padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Download CSV
+                </button>
+                <button onClick={() => { setShowPassbook(null); setPassbookFilter(""); }} style={{ background:"transparent", border:"none", color:"#94A3B8", cursor:"pointer", fontSize:24 }}>×</button>
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+              {(!showPassbook.transactions || showPassbook.transactions.length === 0) ? (
+                <div style={{ textAlign: "center", color: COLORS.textMuted, padding: 20 }}>No transactions yet.</div>
+              ) : (
+                <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 12, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 70px 120px 85px 85px 30px", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.04)", borderBottom: `1px solid rgba(255,255,255,0.08)`, fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase" }}>
+                    <div>Date</div>
+                    <div>Desc</div>
+                    <div>Mode</div>
+                    <div>Bank</div>
+                    <div style={{ textAlign: "right" }}>Given</div>
+                    <div style={{ textAlign: "right" }}>Recv'd</div>
+                    <div></div>
+                  </div>
+                  {[...showPassbook.transactions]
+                    .filter(tx => {
+                      if (!passbookFilter) return true;
+                      const q = passbookFilter.toLowerCase();
+                      const bank = banks?.find(b => b.id === tx.bankId);
+                      const bankName = bank ? bank.name.toLowerCase() : "";
+                      const note = (tx.note || "").toLowerCase();
+                      const amountStr = tx.amount.toString();
+                      return note.includes(q) || bankName.includes(q) || amountStr.includes(q) || tx.date.includes(q);
+                    })
+                    .sort((a,b) => new Date(b.date) - new Date(a.date))
+                    .map((tx, i, arr) => {
+                    const isLast = i === arr.length - 1;
+                    const bank = banks?.find(b => b.id === tx.bankId);
+                    const mode = bank ? "Transfer" : "Cash";
+                    const bankName = bank ? bank.name : "-";
+                    return (
+                      <div key={tx.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 70px 120px 85px 85px 30px", gap: 12, padding: "12px 16px", borderBottom: isLast ? "none" : `1px solid rgba(255,255,255,0.04)`, fontSize: 13, alignItems: "center", color: COLORS.text }}>
+                        <div style={{ color: COLORS.textMuted, fontSize: 12 }}>{tx.date.substring(5)}</div>
+                        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={tx.note || "-"}>{tx.note || "-"}</div>
+                        <div style={{ fontSize: 12 }}>{mode}</div>
+                        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: COLORS.secondary, fontSize: 12 }} title={bankName}>{bankName}</div>
+                        <div style={{ textAlign: "right", color: COLORS.danger, fontWeight: 600 }}>{tx.type === "GIVEN" ? `₹${parseFloat(tx.amount).toLocaleString("en-IN")}` : "-"}</div>
+                        <div style={{ textAlign: "right", color: COLORS.success, fontWeight: 600 }}>{tx.type === "RECEIVED" ? `₹${parseFloat(tx.amount).toLocaleString("en-IN")}` : "-"}</div>
+                        <button 
+                          onClick={() => {
+                            setTxForm({ amount: tx.amount, date: tx.date, bankId: tx.bankId, note: tx.note || "" });
+                            setShowTransactionModal({ person: showPassbook, type: tx.type, editingTx: tx });
+                          }}
+                          style={{ background: "transparent", border: "none", color: COLORS.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          title="Edit transaction"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:COLORS.bgCard, width:"90%", maxWidth: 400, borderRadius:20, padding:24, border:`1px solid ${COLORS.border}`}}>
+            <div style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>Delete {deleteConfirm.name}?</div>
+            <div style={{ fontSize:14, color:COLORS.textMuted, marginBottom:24, lineHeight: 1.5 }}>
+              Are you sure you want to delete <b>{deleteConfirm.name}</b>? 
+              <br/><br/>
+              <i>Note: This will not automatically delete the linked expenses/incomes in your main ledger. You can delete those manually if needed.</i>
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:12 }}>
+              <button onClick={() => setDeleteConfirm(null)} style={{ background:"transparent", color:COLORS.text, border:`1px solid rgba(255,255,255,0.2)`, padding:"8px 16px", borderRadius:8, cursor:"pointer" }}>Cancel</button>
+              <button onClick={handleDeletePerson} style={{ background:COLORS.danger, color:"#fff", border:"none", padding:"8px 16px", borderRadius:8, fontWeight:600, cursor:"pointer" }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 
 export default function FinPilotAI({ user }) {
@@ -9754,6 +10574,12 @@ export default function FinPilotAI({ user }) {
   const [banks, setBanks] = useLocalStorage("fp_banks_" + activeWorkspaceId, []);
   const [active,     setActive]     = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expenseToEdit, setExpenseToEdit] = useState(null);
+  const [incomeToEdit, setIncomeToEdit] = useState(null);
+  const [returnToTabAfterEdit, setReturnToTabAfterEdit] = useState(null);
+  const [returnToPassbookCC, setReturnToPassbookCC] = useState(null);
+  const [returnToPassbookBank, setReturnToPassbookBank] = useState(null);
+  const [returnToPassbookInsurance, setReturnToPassbookInsurance] = useState(null);
 
   const [incomes,     setIncomes]     = useLocalStorage("fp_incomes_" + activeWorkspaceId,     SEED_INCOME);
   const [creditCards, setCreditCards] = useLocalStorage("fp_creditcards_" + activeWorkspaceId, SEED_CREDIT_CARDS);
@@ -9789,6 +10615,7 @@ export default function FinPilotAI({ user }) {
 
   const [insurance, setInsurance] = useLocalStorage("fp_insurance_" + activeWorkspaceId, INSURANCE_SEED);
   const [deletedTransactions, setDeletedTransactions] = useLocalStorage("fp_deleted_" + activeWorkspaceId, []);
+  const [friendlyLoans, setFriendlyLoans] = useLocalStorage("fp_friendlyloans_" + activeWorkspaceId, FRIENDLY_LOANS_SEED);
 
   // Firebase Sync Logic
   const [isFirebaseLoaded, setIsFirebaseLoaded] = useState(false);
@@ -9876,6 +10703,7 @@ export default function FinPilotAI({ user }) {
               localStorage.setItem("fp_subscriptions_" + wsId, JSON.stringify(mergeById(getLocal("fp_subscriptions_" + wsId, SUBS_SEED), wsData.subscriptions || SUBS_SEED)));
               localStorage.setItem("fp_insurance_" + wsId, JSON.stringify(mergeById(getLocal("fp_insurance_" + wsId, INSURANCE_SEED), wsData.insurance || INSURANCE_SEED)));
               localStorage.setItem("fp_deleted_" + wsId, JSON.stringify(data.workspacesData[wsId].deletedTransactions || []));
+              localStorage.setItem("fp_friendlyloans_" + wsId, JSON.stringify(mergeById(getLocal("fp_friendlyloans_" + wsId, FRIENDLY_LOANS_SEED), wsData.friendlyLoans || FRIENDLY_LOANS_SEED)));
             });
 
             // Set state variables to the active workspace values
@@ -9890,6 +10718,7 @@ export default function FinPilotAI({ user }) {
             setSubscriptions(getLocal("fp_subscriptions_" + activeId, SUBS_SEED));
             setInsurance(getLocal("fp_insurance_" + activeId, INSURANCE_SEED));
             setDeletedTransactions(getLocal("fp_deleted_" + activeId, []));
+            setFriendlyLoans(getLocal("fp_friendlyloans_" + activeId, FRIENDLY_LOANS_SEED));
 
             console.log("Firebase Firestore data loaded and merged successfully!");
           } else {
@@ -9909,6 +10738,7 @@ export default function FinPilotAI({ user }) {
             const mergedSubscriptions = mergeById(getLocal("fp_subscriptions", SUBS_SEED), data.subscriptions || SUBS_SEED);
             const mergedInsurance = mergeById(getLocal("fp_insurance", INSURANCE_SEED), data.insurance || INSURANCE_SEED);
             const mergedDeleted = data.deletedTransactions || [];
+            const mergedFriendlyLoans = mergeById(getLocal("fp_friendlyloans", FRIENDLY_LOANS_SEED), data.friendlyLoans || FRIENDLY_LOANS_SEED);
 
             localStorage.setItem("fp_banks_default", JSON.stringify(mergedBanks));
             localStorage.setItem("fp_incomes_default", JSON.stringify(mergedIncomes));
@@ -9921,6 +10751,7 @@ export default function FinPilotAI({ user }) {
             localStorage.setItem("fp_subscriptions_default", JSON.stringify(mergedSubscriptions));
             localStorage.setItem("fp_insurance_default", JSON.stringify(mergedInsurance));
             localStorage.setItem("fp_deleted_default", JSON.stringify(mergedDeleted));
+            localStorage.setItem("fp_friendlyloans_default", JSON.stringify(mergedFriendlyLoans));
 
             setBanks(mergedBanks);
             setIncomes(mergedIncomes);
@@ -9933,6 +10764,7 @@ export default function FinPilotAI({ user }) {
             setSubscriptions(mergedSubscriptions);
             setInsurance(mergedInsurance);
             setDeletedTransactions(mergedDeleted);
+            setFriendlyLoans(mergedFriendlyLoans);
 
             console.log("Old Firestore single-workspace data migrated to Default Workspace!");
           }
@@ -9961,6 +10793,7 @@ export default function FinPilotAI({ user }) {
           const localSubscriptions = getLocal("fp_subscriptions", subscriptions);
           const localInsurance = getLocal("fp_insurance", insurance);
           const localDeleted = getLocal("fp_deleted", deletedTransactions);
+          const localFriendlyLoans = getLocal("fp_friendlyloans", friendlyLoans);
 
           localStorage.setItem("fp_banks_default", JSON.stringify(localBanks));
           localStorage.setItem("fp_incomes_default", JSON.stringify(localIncomes));
@@ -9973,6 +10806,7 @@ export default function FinPilotAI({ user }) {
           localStorage.setItem("fp_subscriptions_default", JSON.stringify(localSubscriptions));
           localStorage.setItem("fp_insurance_default", JSON.stringify(localInsurance));
           localStorage.setItem("fp_deleted_default", JSON.stringify(localDeleted));
+          localStorage.setItem("fp_friendlyloans_default", JSON.stringify(localFriendlyLoans));
 
           setBanks(localBanks);
           setIncomes(localIncomes);
@@ -9985,6 +10819,7 @@ export default function FinPilotAI({ user }) {
           setSubscriptions(localSubscriptions);
           setInsurance(localInsurance);
           setDeletedTransactions(localDeleted);
+          setFriendlyLoans(localFriendlyLoans);
 
           const payload = sanitizeForFirestore({
             workspaces: defaultWs,
@@ -10045,7 +10880,8 @@ export default function FinPilotAI({ user }) {
             goals: getLocal("fp_goals_" + ws.id, GOALS_SEED),
             subscriptions: getLocal("fp_subscriptions_" + ws.id, SUBS_SEED),
             insurance: getLocal("fp_insurance_" + ws.id, INSURANCE_SEED),
-            deletedTransactions: getLocal("fp_deleted_" + ws.id, [])
+            deletedTransactions: getLocal("fp_deleted_" + ws.id, []),
+            friendlyLoans: getLocal("fp_friendlyloans_" + ws.id, FRIENDLY_LOANS_SEED)
           };
         });
 
@@ -10085,7 +10921,8 @@ export default function FinPilotAI({ user }) {
     insurance,
     deletedTransactions,
     workspaces,
-    activeWorkspaceId
+    activeWorkspaceId,
+    friendlyLoans
   ]);
 
   // ── Global date filter (default = current month) ──
@@ -10104,17 +10941,18 @@ export default function FinPilotAI({ user }) {
   const renderContent = () => {
     switch (active) {
       case "dashboard":    return <DashboardLive incomes={incomes} expenses={expenses} filter={filter} creditCards={creditCards} investments={investments} loans={loans} goals={goals} banks={banks} />;
-      case "income":       return <IncomeViewLive banks={banks} creditCards={creditCards} incomes={incomes} setIncomes={setIncomes} filter={filter} investments={investments} setInvestments={setInvestments} insurance={insurance} setInsurance={setInsurance} setDeletedTransactions={setDeletedTransactions} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
-      case "expense":      return <ExpenseViewLive banks={banks} expenses={expenses} setExpenses={setExpenses} filter={filter} subscriptions={subscriptions} setSubscriptions={setSubscriptions} insurance={insurance} setInsurance={setInsurance} investments={investments} setInvestments={setInvestments} loans={loans} setLoans={setLoans} creditCards={creditCards} setCreditCards={setCreditCards} setDeletedTransactions={setDeletedTransactions} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={user?.uid} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
+      case "income":       return <IncomeViewLive banks={banks} creditCards={creditCards} incomes={incomes} setIncomes={setIncomes} initialEditTx={incomeToEdit} clearInitialEditTx={() => setIncomeToEdit(null)} onCloseEditModal={() => { if (returnToTabAfterEdit) { setActive(returnToTabAfterEdit); setReturnToTabAfterEdit(null); } }} filter={filter} investments={investments} setInvestments={setInvestments} insurance={insurance} setInsurance={setInsurance} setDeletedTransactions={setDeletedTransactions} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
+      case "expense":      return <ExpenseViewLive banks={banks} expenses={expenses} setExpenses={setExpenses} initialEditTx={expenseToEdit} clearInitialEditTx={() => setExpenseToEdit(null)} onCloseEditModal={() => { if (returnToTabAfterEdit) { setActive(returnToTabAfterEdit); setReturnToTabAfterEdit(null); } }} filter={filter} subscriptions={subscriptions} setSubscriptions={setSubscriptions} insurance={insurance} setInsurance={setInsurance} investments={investments} setInvestments={setInvestments} loans={loans} setLoans={setLoans} creditCards={creditCards} setCreditCards={setCreditCards} setDeletedTransactions={setDeletedTransactions} vendorMaster={vendorMaster} setVendorMaster={setVendorMaster} categoryMaster={categoryMaster} setCategoryMaster={setCategoryMaster} companyMaster={companyMaster} setCompanyMaster={setCompanyMaster} platformMaster={platformMaster} setPlatformMaster={setPlatformMaster} uid={user?.uid} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
 
       case "budget":       return <BudgetErrorBoundary><BudgetViewLive expenses={expenses} budgets={budgets} setBudgets={setBudgets} filter={filter} incomes={incomes} investments={investments} insurance={insurance} loans={loans} /></BudgetErrorBoundary>;
+      case "friendlyloans":return <FriendlyLoansLive friendlyLoans={friendlyLoans} setFriendlyLoans={setFriendlyLoans} banks={banks} setBanks={setBanks} expenses={expenses} setExpenses={setExpenses} incomes={incomes} setIncomes={setIncomes} />;
       case "investments":  return <InvestmentsViewLive investments={investments} setInvestments={setInvestments} goals={goals} banks={banks} creditCards={creditCards} expenses={expenses} incomes={incomes} />;
       case "goals":        return <GoalsViewLive goals={goals} setGoals={setGoals} investments={investments} loans={loans} insurance={insurance} />;
       case "emi":          return <EMIViewLive loans={loans} setLoans={setLoans} goals={goals} banks={banks} creditCards={creditCards} />;
-            case "creditcards":  return <CreditCardsViewLive creditCards={creditCards} setCreditCards={setCreditCards} expenses={expenses} />;
+      case "creditcards":  return <CreditCardsViewLive creditCards={creditCards} setCreditCards={setCreditCards} expenses={expenses} initialPassbook={returnToPassbookCC} clearInitialPassbook={() => setReturnToPassbookCC(null)} onEditExpense={(tx, cc) => { setExpenseToEdit(tx); setReturnToTabAfterEdit("creditcards"); setReturnToPassbookCC(cc); setActive("expense"); }} />;
       case "subscriptions":return <SubscriptionsView subscriptions={subscriptions} setSubscriptions={setSubscriptions} categoryMaster={[]} banks={banks} creditCards={creditCards} expenses={expenses} />;
-      case "insurance":    return <InsuranceView insurance={insurance} setInsurance={setInsurance} banks={banks} creditCards={creditCards} expenses={expenses} incomes={incomes} goals={goals} />;
-      case "banks":        return <BanksViewLive banks={banks} setBanks={setBanks} expenses={expenses} setExpenses={setExpenses} incomes={incomes} setIncomes={setIncomes} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
+      case "insurance":    return <InsuranceView insurance={insurance} setInsurance={setInsurance} banks={banks} creditCards={creditCards} expenses={expenses} incomes={incomes} goals={goals} initialEditItem={returnToPassbookInsurance} clearInitialEditItem={() => setReturnToPassbookInsurance(null)} onEditExpense={(tx, ins) => { setExpenseToEdit(tx); setReturnToTabAfterEdit("insurance"); setReturnToPassbookInsurance(ins); setActive("expense"); }} onEditIncome={(tx, ins) => { setIncomeToEdit(tx); setReturnToTabAfterEdit("insurance"); setReturnToPassbookInsurance(ins); setActive("income"); }} />;
+      case "banks":        return <BanksViewLive banks={banks} setBanks={setBanks} expenses={expenses} setExpenses={setExpenses} incomes={incomes} setIncomes={setIncomes} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} initialPassbook={returnToPassbookBank} clearInitialPassbook={() => setReturnToPassbookBank(null)} onEditExpense={(tx, bankId) => { setExpenseToEdit(tx); setReturnToTabAfterEdit("banks"); setReturnToPassbookBank(bankId); setActive("expense"); }} onEditIncome={(tx, bankId) => { setIncomeToEdit(tx); setReturnToTabAfterEdit("banks"); setReturnToPassbookBank(bankId); setActive("income"); }} />;
       case "interworkspace":return <InterWorkspaceViewLive workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />;
       case "score":        return <HealthScoreView />;
       case "retirement":   return <RetirementView />;
