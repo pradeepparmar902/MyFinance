@@ -12,6 +12,14 @@ function App() {
 
   useEffect(() => {
     let snapshotUnsubscribe = null;
+    
+    // Force login on new tab/instance (prevents direct bookmark access from skipping login)
+    if (!sessionStorage.getItem('fp_tab_active')) {
+      localStorage.clear();
+      signOut(auth);
+      sessionStorage.setItem('fp_tab_active', 'true');
+    }
+
     const lastActive = localStorage.getItem('fp_last_active');
     const now = Date.now();
     
