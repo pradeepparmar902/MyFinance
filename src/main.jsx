@@ -59,6 +59,20 @@ function App() {
             localStorage.setItem('fp_session_id', localSessionId);
           }
 
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.currentSessionId && data.currentSessionId !== localSessionId) {
+              const choice = window.confirm("You are already logged in on another device.\n\nClick OK to log out the other device and continue here.\nClick Cancel to exit from this device.");
+              if (!choice) {
+                localStorage.clear();
+                signOut(auth);
+                setUser(null);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+
           // Update user details
           await setDoc(userRef, {
             email: currentUser.email || "",
